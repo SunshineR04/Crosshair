@@ -1,0 +1,7 @@
+<Page x:Class="CrosshairOverlay.Widget.CrosshairPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="Transparent">
+
+    <Canvas x:Name="CrosshairCanvas" Background="Transparent" />
+</Page>

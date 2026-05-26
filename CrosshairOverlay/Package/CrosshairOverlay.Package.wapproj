@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <WapProjPath Condition="'$(WapProjPath)' == ''">$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\</WapProjPath>
+    <WapProjPath Condition="Exists('C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Microsoft\DesktopBridge\Microsoft.DesktopBridge.props')">C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Microsoft\DesktopBridge\</WapProjPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ProjectGuid>CA5CAD1A-224A-4171-B13A-F16E576FDD12</ProjectGuid>
+    <EntryPointProjectUniqueName>..\CrosshairOverlay.csproj</EntryPointProjectUniqueName>
+    <TargetPlatformVersion>10.0.19041.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <DefaultLanguage>zh-CN</DefaultLanguage>
+    <AppxPackage>true</AppxPackage>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Always</AppxBundle>
+    <AppxBundlePlatforms>x64</AppxBundlePlatforms>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>True</AppxSymbolPackageEnabled>
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CrosshairOverlay.csproj" />
+    <ProjectReference Include="..\..\CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj">
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')" />
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')" />
+</Project>

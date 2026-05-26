@@ -1,0 +1,62 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.nupkg
+
+## .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+**/Properties/launchSettings.json
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet
+*.nuget.props
+*.nuget.targets
+.nuget/
+
+## MSIX/AppPackages
+CrosshairOverlay.Widget/AppPackages/
+CrosshairOverlay.Widget/bin/
+CrosshairOverlay/Package/AppContent/
+CrosshairOverlay/Package/PackageLayout/
+CrosshairOverlay/Package/AppPackages/
+CrosshairOverlay/Package/*.msix
+CrosshairOverlay/Package/*.msixbundle
+CrosshairOverlay/Package/*.appxbundle
+CrosshairOverlay/Package/*.appx
+
+## Temp extraction
+$env:TEMP\widget_*
+
+## Certificate (local dev)
+*.pfx
+*.cer
+
+## Logs
+*.log
+
+## macOS
+.DS_Store
+
+## Rider
+.idea/
+*.sln.iml
