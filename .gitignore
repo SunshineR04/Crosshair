@@ -1,6 +1,7 @@
 ## .NET
 bin/
 obj/
+.claude/
 *.user
 *.suo
 *.userosscache
