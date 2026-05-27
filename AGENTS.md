@@ -110,6 +110,7 @@ CrosshairOverlay_v1.0.0.zip
 
 - **Admin restart hotkey race**: When toggling Real Overlay, the non-admin process must `UnregisterHotKey` before spawning the admin process. The admin process's 5‑retry loop (1s intervals) resolves transient `ERROR_HOTKEY_ALREADY_REGISTERED (1409)`.
 - **Game Bar Widget auto-center**: Impossible via any API (`TryResizeWindowAsync`, `ApplicationView.TryResizeView`, `SetWindowPos`). User must drag the widget title bar once.
+- **Game Bar Widget click-through**: Pinned widgets block mouse input by default. User must click the Mouse icon on Game Bar Home Bar to enable click-through. Without it, the entire widget area (1920×1080) is unclickable. Our manifest declares `PinningSupported=true` so click-through is supported out of the box.
 - **EnumWindows on Widget HWND**: The Widget's CoreWindow is invisible to Win32 `EnumWindows`. Do not attempt `WidgetPositioner`-style scanning.
 - **ForceTopmost timer**: `System.Timers.Timer.Elapsed` runs on thread pool; `SetWindowPos` from non-UI thread is safe for USER32 operations but ensure the HWND remains valid.
 - **SkiaSharp alpha**: `SKAlphaType.Premul` is required for `UpdateLayeredWindow` with `AC_SRC_ALPHA`. Using `Unpremul` causes rendering artifacts.
