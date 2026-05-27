@@ -64,7 +64,7 @@ public partial class App : System.Windows.Application
         _hotkeySource = HwndSource.FromHwnd(_hotkeyHwnd);
         _hotkeySource.AddHook(HwndHook);
 
-        var viewModel = new MainViewModel(overlayHost, _settingsService, _appServiceServer);
+        var viewModel = new MainViewModel(overlayHost, _settingsService, profile, _appServiceServer);
         _viewModel = viewModel;
         _overlayHost = overlayHost;
         _mainWindow = new MainWindow(viewModel);
@@ -99,19 +99,19 @@ public partial class App : System.Windows.Application
 
     private void OnRestartRequested()
     {
-        _viewModel?.SaveSettings();
-        _overlayHost?.Hide();
-
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _toggleHotkeyId);
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _settingsHotkeyId);
 
         try
         {
+            _viewModel?.SaveSettings();
+            _overlayHost?.Hide();
             AdminElevationHelper.RestartAsAdmin();
             Current.Shutdown();
         }
         catch (System.ComponentModel.Win32Exception)
         {
+            RegisterHotkeys(_hotkeyHwnd);
             _notifyIcon?.ShowBalloonTip(3000, "提示",
                 "需要管理员权限才能启用独占全屏模式。请重新勾选并以管理员身份运行。", ToolTipIcon.Info);
         }
@@ -132,20 +132,16 @@ public partial class App : System.Windows.Application
             var id = wParam.ToInt32();
             handled = true;
 
-            Dispatcher.Invoke(() =>
+            if (id == _toggleHotkeyId)
             {
-                if (id == _toggleHotkeyId)
-                {
-                    var wasVisible = _viewModel?.IsVisible ?? false;
-                    _viewModel?.ToggleOverlay();
-                    UpdateToggleMenu(_viewModel?.IsVisible ?? false);
-                }
-                else if (id == _settingsHotkeyId)
-                {
-                    _mainWindow?.Show();
-                    _mainWindow?.Activate();
-                }
-            });
+                _viewModel?.ToggleOverlay();
+                UpdateToggleMenu(_viewModel?.IsVisible ?? false);
+            }
+            else if (id == _settingsHotkeyId)
+            {
+                _mainWindow?.Show();
+                _mainWindow?.Activate();
+            }
         }
         return IntPtr.Zero;
     }
@@ -220,8 +216,6 @@ public partial class App : System.Windows.Application
 
     private void ShutdownApplication()
     {
-        _viewModel?.SaveSettings();
-        _overlayHost?.Hide();
         Current.Shutdown();
     }
 
@@ -236,6 +230,7 @@ public partial class App : System.Windows.Application
         _hotkeyWindow?.Close();
 
         _overlayHost?.Dispose();
+        _viewModel?.Dispose();
         _appServiceServer?.Dispose();
 
         if (_notifyIcon != null)

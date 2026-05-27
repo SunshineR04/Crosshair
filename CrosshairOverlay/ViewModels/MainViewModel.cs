@@ -215,13 +215,13 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand MinimizeCommand { get; }
     public ICommand ExitCommand { get; }
 
-    public MainViewModel(OverlayHost overlayHost, SettingsService settingsService, AppServiceServer? appServiceServer = null)
+    public MainViewModel(OverlayHost overlayHost, SettingsService settingsService, CrosshairProfile profile, AppServiceServer? appServiceServer = null)
     {
         _overlayHost = overlayHost;
         _settingsService = settingsService;
         _appServiceServer = appServiceServer;
 
-        _profile = _settingsService.Load();
+        _profile = profile;
 
         _selectedStyle = CrosshairStyles[Array.IndexOf(StyleMapping, _profile.Style)];
         _colorHex = _profile.Color;
@@ -232,7 +232,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         ToggleVisibleCommand = new RelayCommand(() => IsVisible = !IsVisible);
         MinimizeCommand = new RelayCommand(() => CloseRequested?.Invoke());
-        ExitCommand = new RelayCommand(() => { SaveSettings(); _overlayHost.Hide(); System.Windows.Application.Current.Shutdown(); });
+        ExitCommand = new RelayCommand(() => System.Windows.Application.Current.Shutdown());
 
         _saveDebounceTimer = new System.Timers.Timer(400) { AutoReset = false };
         _saveDebounceTimer.Elapsed += (_, _) =>

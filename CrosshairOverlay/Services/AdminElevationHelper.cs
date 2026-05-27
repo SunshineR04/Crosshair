@@ -15,7 +15,8 @@ public static class AdminElevationHelper
     public static void RestartAsAdmin(string extraArgs = "")
     {
         var exePath = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(exePath)) return;
+        if (string.IsNullOrEmpty(exePath))
+            throw new InvalidOperationException("Unable to determine process executable path.");
 
         var startInfo = new ProcessStartInfo
         {
@@ -25,12 +26,6 @@ public static class AdminElevationHelper
             Verb = "runas"
         };
 
-        try
-        {
-            Process.Start(startInfo);
-        }
-        catch
-        {
-        }
+        Process.Start(startInfo);
     }
 }
