@@ -112,6 +112,7 @@ public partial class App : System.Windows.Application
         catch (System.ComponentModel.Win32Exception)
         {
             RegisterHotkeys(_hotkeyHwnd);
+            _viewModel?.ResetExclusiveFullscreen();
             _notifyIcon?.ShowBalloonTip(3000, "提示",
                 "需要管理员权限才能启用独占全屏模式。请重新勾选并以管理员身份运行。", ToolTipIcon.Info);
         }
@@ -221,6 +222,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _viewModel?.Dispose();
         _viewModel?.SaveSettings();
 
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _toggleHotkeyId);

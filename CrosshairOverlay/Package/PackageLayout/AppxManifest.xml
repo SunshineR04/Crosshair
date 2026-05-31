@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 mp desktop rescap">
+
+  <Identity Name="CrosshairOverlayWidget"
+            Publisher="CN=CrosshairOverlay"
+            Version="1.0.0.0"
+            ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Crosshair Overlay</DisplayName>
+    <PublisherDisplayName>CrosshairOverlay</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+    <PackageDependency Name="Microsoft.NET.Native.Framework.2.2" MinVersion="2.2.29512.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.NET.Native.Runtime.2.2" MinVersion="2.2.28604.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00" MinVersion="14.0.30035.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+
+  <Resources><Resource Language="zh-CN" /></Resources>
+
+  <Applications>
+    <Application Id="Desktop" Executable="DesktopApp\CrosshairOverlay.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Crosshair Overlay" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" Description="Crosshair Overlay" BackgroundColor="#222222">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="DesktopApp\CrosshairOverlay.exe" />
+      </Extensions>
+    </Application>
+
+    <Application Id="App" Executable="CrosshairOverlay.Widget.exe" EntryPoint="CrosshairOverlay.Widget.App">
+      <uap:VisualElements DisplayName="准心叠加层" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" Description="Crosshair Overlay Game Bar Widget" BackgroundColor="transparent">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <uap:Extension Category="windows.appService">
+          <uap:AppService Name="CrosshairProfileService" />
+        </uap:Extension>
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="microsoft.gameBarUIExtension" Id="CrosshairWidget" DisplayName="准心叠加层" Description="Crosshair Overlay" PublicFolder="GameBar">
+            <uap3:Properties>
+              <GameBarWidget Type="Standard">
+                <HomeMenuVisible>true</HomeMenuVisible>
+                <PinningSupported>true</PinningSupported>
+                <Window>
+                  <AllowForegroundTransparency>true</AllowForegroundTransparency>
+                   <Size><Height>2160</Height><Width>3840</Width><MaxHeight>4320</MaxHeight><MaxWidth>7680</MaxWidth></Size>
+                </Window>
+              </GameBarWidget>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Extensions>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Microsoft.Gaming.XboxGameBar.dll</Path>
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.Authentication.XboxGameBarWebAuthenticationBroker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarForegroundWorker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationManager" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidget" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.Input.XboxGameBarHotkeyWatcher" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationBuilder" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetActivity" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarAppTargetTracker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetControl" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+  </Extensions>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

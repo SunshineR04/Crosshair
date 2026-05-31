@@ -15,6 +15,7 @@ public class MainViewModel : INotifyPropertyChanged
 
     private CrosshairProfile _profile;
     private readonly System.Timers.Timer _saveDebounceTimer;
+    private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event Action? CloseRequested;
@@ -123,7 +124,11 @@ public class MainViewModel : INotifyPropertyChanged
                 Profile.Color = value;
                 ApplyProfile();
             }
-            catch { }
+            catch
+            {
+                _colorHex = Profile.Color;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -177,7 +182,11 @@ public class MainViewModel : INotifyPropertyChanged
                 Profile.OutlineColor = value;
                 ApplyProfile();
             }
-            catch { }
+            catch
+            {
+                _outlineColorHex = Profile.OutlineColor;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -206,6 +215,13 @@ public class MainViewModel : INotifyPropertyChanged
 
     public bool IsAdmin => AdminElevationHelper.IsRunningAsAdmin();
 
+    public void ResetExclusiveFullscreen()
+    {
+        _useExclusiveFullscreen = false;
+        Profile.ExclusiveFullscreenMode = false;
+        OnPropertyChanged(nameof(UseExclusiveFullscreen));
+    }
+
     public string AdminStatusText =>
         IsAdmin
             ? "已获得管理员权限，独占全屏可用"
@@ -223,7 +239,8 @@ public class MainViewModel : INotifyPropertyChanged
 
         _profile = profile;
 
-        _selectedStyle = CrosshairStyles[Array.IndexOf(StyleMapping, _profile.Style)];
+        var styleIdx = Array.IndexOf(StyleMapping, _profile.Style);
+        _selectedStyle = styleIdx >= 0 ? CrosshairStyles[styleIdx] : CrosshairStyles[0];
         _colorHex = _profile.Color;
         _outlineColorHex = _profile.OutlineColor;
         _isVisible = _profile.IsVisible;
@@ -241,7 +258,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void SaveSettings()
     {
-        _saveDebounceTimer.Stop();
+        if (!_disposed)
+            _saveDebounceTimer.Stop();
         _profile.IsVisible = _isVisible;
         _settingsService.Save(_profile);
     }
@@ -261,6 +279,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         _saveDebounceTimer.Stop();
         _saveDebounceTimer.Dispose();
     }

@@ -54,8 +54,10 @@
                 <Window>
                   <AllowForegroundTransparency>true</AllowForegroundTransparency>
                   <Size>
-                    <Height>1080</Height>
-                    <Width>1920</Width>
+                    <Height>2160</Height>
+                    <Width>3840</Width>
+                    <MaxHeight>4320</MaxHeight>
+                    <MaxWidth>7680</MaxWidth>
                   </Size>
                 </Window>
               </GameBarWidget>

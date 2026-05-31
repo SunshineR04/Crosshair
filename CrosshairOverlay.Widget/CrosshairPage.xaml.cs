@@ -19,7 +19,13 @@ namespace CrosshairOverlay.Widget
         {
             InitializeComponent();
             Loaded += OnPageLoaded;
+            Unloaded += OnPageUnloaded;
             AppServiceClient.Instance.ProfileUpdated += OnProfileUpdated;
+        }
+
+        private void OnPageUnloaded(object sender, RoutedEventArgs e)
+        {
+            AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
         }
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
@@ -42,13 +48,35 @@ namespace CrosshairOverlay.Widget
         {
             CrosshairCanvas.Children.Clear();
 
-            double cx = ActualWidth / 2.0;
-            double cy = ActualHeight / 2.0;
-            if (cx <= 0 || cy <= 0) return;
+            try
+            {
+                var displayInfo = Windows.Graphics.Display.DisplayInformation.GetForCurrentView();
+                double rawWidth = displayInfo.ScreenWidthInRawPixels;
+                double rawHeight = displayInfo.ScreenHeightInRawPixels;
+                if (rawWidth > 0 && rawHeight > 0)
+                {
+                    double cx = rawWidth / 2.0;
+                    double cy = rawHeight / 2.0;
 
-            var baseColor = ParseColor(_profile.Color, _profile.Opacity);
-            var outlineColor = ParseColor(_profile.OutlineColor, _profile.Opacity);
+                    var baseColor = ParseColor(_profile.Color, _profile.Opacity);
+                    var outlineColor = ParseColor(_profile.OutlineColor, _profile.Opacity);
+                    DrawCrosshair(cx, cy, baseColor, outlineColor);
+                    return;
+                }
+            }
+            catch { }
 
+            double cxFallback = ActualWidth / 2.0;
+            double cyFallback = ActualHeight / 2.0;
+            if (cxFallback <= 0 || cyFallback <= 0) return;
+
+            var fbColor = ParseColor(_profile.Color, _profile.Opacity);
+            var fbOutline = ParseColor(_profile.OutlineColor, _profile.Opacity);
+            DrawCrosshair(cxFallback, cyFallback, fbColor, fbOutline);
+        }
+
+        private void DrawCrosshair(double cx, double cy, Color baseColor, Color outlineColor)
+        {
             switch (_profile.Style)
             {
                 case CrosshairStyle.Cross: DrawCross(cx, cy, baseColor, outlineColor); break;
