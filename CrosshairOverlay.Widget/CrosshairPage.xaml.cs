@@ -1,5 +1,6 @@
 using System;
 using Windows.Foundation;
+using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -14,21 +15,40 @@ namespace CrosshairOverlay.Widget
     public sealed partial class CrosshairPage : Page
     {
         private CrosshairProfile _profile = new CrosshairProfile();
+        private DispatcherTimer _syncTimer;
+        private string _lastJson = string.Empty;
+        private double _cachedCenterX = -1;
+        private double _cachedCenterY = -1;
 
         public CrosshairPage()
         {
             InitializeComponent();
             Loaded += OnPageLoaded;
             Unloaded += OnPageUnloaded;
+            SizeChanged += OnSizeChanged;
             AppServiceClient.Instance.ProfileUpdated += OnProfileUpdated;
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
             AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
+            StopSyncTimer();
         }
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var di = Windows.Graphics.Display.DisplayInformation.GetForCurrentView();
+                _cachedCenterX = di.ScreenWidthInRawPixels / 2.0;
+                _cachedCenterY = di.ScreenHeightInRawPixels / 2.0;
+            }
+            catch { }
+            RenderCrosshair();
+            StartSyncTimer();
+        }
+
+        private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
             RenderCrosshair();
         }
@@ -44,39 +64,58 @@ namespace CrosshairOverlay.Widget
             Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, RenderCrosshair);
         }
 
+        private void StartSyncTimer()
+        {
+            _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _syncTimer.Tick += OnSyncTimerTick;
+            _syncTimer.Start();
+        }
+
+        private void StopSyncTimer()
+        {
+            if (_syncTimer != null)
+            {
+                _syncTimer.Stop();
+                _syncTimer = null;
+            }
+        }
+
+        private void OnSyncTimerTick(object sender, object e)
+        {
+            LoadSettingsFromFile();
+        }
+
+        private async void LoadSettingsFromFile()
+        {
+            try
+            {
+                var folder = Windows.Storage.ApplicationData.Current.LocalFolder;
+                var file = await folder.GetFileAsync("widget_settings.json");
+                var json = await Windows.Storage.FileIO.ReadTextAsync(file);
+                if (json == _lastJson) return;
+                _lastJson = json;
+
+                var profile = Newtonsoft.Json.JsonConvert.DeserializeObject<CrosshairProfile>(json);
+                if (profile != null)
+                {
+                    _profile = profile;
+                    RenderCrosshair();
+                }
+            }
+            catch { }
+        }
+
         private void RenderCrosshair()
         {
             CrosshairCanvas.Children.Clear();
 
-            try
-            {
-                var displayInfo = Windows.Graphics.Display.DisplayInformation.GetForCurrentView();
-                double rawWidth = displayInfo.ScreenWidthInRawPixels;
-                double rawHeight = displayInfo.ScreenHeightInRawPixels;
-                if (rawWidth > 0 && rawHeight > 0)
-                {
-                    double cx = rawWidth / 2.0;
-                    double cy = rawHeight / 2.0;
+            double cx = _cachedCenterX > 0 ? _cachedCenterX : ActualWidth / 2.0;
+            double cy = _cachedCenterY > 0 ? _cachedCenterY : ActualHeight / 2.0;
+            if (cx <= 0 || cy <= 0) return;
 
-                    var baseColor = ParseColor(_profile.Color, _profile.Opacity);
-                    var outlineColor = ParseColor(_profile.OutlineColor, _profile.Opacity);
-                    DrawCrosshair(cx, cy, baseColor, outlineColor);
-                    return;
-                }
-            }
-            catch { }
+            var baseColor = ParseColor(_profile.Color, _profile.Opacity);
+            var outlineColor = ParseColor(_profile.OutlineColor, _profile.Opacity);
 
-            double cxFallback = ActualWidth / 2.0;
-            double cyFallback = ActualHeight / 2.0;
-            if (cxFallback <= 0 || cyFallback <= 0) return;
-
-            var fbColor = ParseColor(_profile.Color, _profile.Opacity);
-            var fbOutline = ParseColor(_profile.OutlineColor, _profile.Opacity);
-            DrawCrosshair(cxFallback, cyFallback, fbColor, fbOutline);
-        }
-
-        private void DrawCrosshair(double cx, double cy, Color baseColor, Color outlineColor)
-        {
             switch (_profile.Style)
             {
                 case CrosshairStyle.Cross: DrawCross(cx, cy, baseColor, outlineColor); break;

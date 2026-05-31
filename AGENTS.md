@@ -16,7 +16,8 @@ dotnet run --project CrosshairOverlay
 dotnet publish CrosshairOverlay -c Release -r win-x64 --self-contained true
 
 # UWP Widget (requires VS 2019+ with UWP workload + .NET Native toolchain)
-msbuild CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64
+# msbuild is NOT in PATH — use VS 2019 full path:
+& "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe" CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64
 
 # Full MSIX package (manual process, see 'Release packaging' below)
 ```
@@ -80,9 +81,17 @@ Only works when the desktop app runs inside the MSIX package (`Package.Current !
 - Settings are pushed as `ValueSet` with `command` + `profileJson` keys
 - **Standalone exe**: no Widget sync; desktop overlay still works
 
+### Widget settings sync (file-based fallback)
+
+When AppService is unavailable (standalone exe), the desktop app writes settings to:
+```
+%LOCALAPPDATA%\Packages\CrosshairOverlayWidget_ttvw7j9e3pmmp\LocalState\widget_settings.json
+```
+The Widget reads this file every 2 seconds via a `DispatcherTimer` in `CrosshairPage.xaml.cs`. Both AppService and file sync run in parallel — AppService takes precedence when available (instant push), file sync is the fallback.
+
 ### Widget project constraints (VS 2019 + UWP)
 
-- C# language version locked to **8.0** by UWP XAML compiler — no file-scoped namespaces, target-typed new, lambda discard
+- C# language version locked to **8.0** by UWP XAML compiler — no file-scoped namespaces, target-typed new, **lambda discard `(_, _)`**
 - Models must use block-scoped namespaces
 - .NET Native compilation required; raw `bin\Release` output contains uncompiled IL files — use the standalone MSIX's **extracted payload** for packaging
 - Additional VS Installer components needed: `Microsoft.Gaming.XboxGameBar` NuGet, `Microsoft.NETCore.UniversalWindowsPlatform`, `Newtonsoft.Json`
@@ -104,13 +113,16 @@ CrosshairOverlay_v1.0.0.zip
 
 - Settings: `%APPDATA%\CrosshairOverlay\settings.json` (System.Text.Json, `CrosshairProfile` POCO)
 - Error log: `%APPDATA%\CrosshairOverlay\log.txt`
-- Widget cache: `ApplicationData.Current.LocalSettings` (key-value, saved on each change)
+- Widget settings: `%LOCALAPPDATA%\Packages\CrosshairOverlayWidget_ttvw7j9e3pmmp\LocalState\widget_settings.json` (written by desktop app, polled by Widget)
 
 ## Known pitfalls
 
 - **Admin restart hotkey race**: When toggling Real Overlay, the non-admin process must `UnregisterHotKey` before spawning the admin process. The admin process's 5‑retry loop (1s intervals) resolves transient `ERROR_HOTKEY_ALREADY_REGISTERED (1409)`.
-- **Game Bar Widget crosshair centering**: Crosshair center is computed from `DisplayInformation.GetForCurrentView().ScreenWidthInRawPixels / ScreenHeightInRawPixels` (physical display resolution), NOT from `ActualWidth`/`ActualHeight` (Widget window size). This ensures centering survives game resolution switches (e.g. CS2 4:3 stretched). Widget auto-centering via any API remains impossible — set the manifest Size to large values (3840×2160) so the Widget covers the screen and the crosshair coordinate always falls within its bounds.
-- **Game Bar Widget click-through**: Pinned widgets block mouse input by default. User must click the Mouse icon on Game Bar Home Bar to enable click-through. Without it, the entire widget area (1920×1080) is unclickable. Our manifest declares `PinningSupported=true` so click-through is supported out of the box.
+- **Game Bar Widget crosshair centering**: Two-tier strategy. Primary: `DisplayInformation.GetForCurrentView().ScreenWidthInRawPixels` cached in `OnPageLoaded` (works because the desktop triggers this before any game resolution change). Fallback: `ActualWidth/2, ActualHeight/2`. Widget auto-centering via any API remains impossible — set the manifest Size to large values (3840×2160) so the Widget covers the screen and the crosshair coordinate always falls within its bounds.
+- **Game Bar Widget click-through**: Pinned widgets block mouse input by default. User must click the Mouse icon on Game Bar Home Bar to enable click-through. Without it, the entire widget area is unclickable. Our manifest declares `PinningSupported=true` so click-through is supported out of the box.
 - **EnumWindows on Widget HWND**: The Widget's CoreWindow is invisible to Win32 `EnumWindows`. Do not attempt `WidgetPositioner`-style scanning.
 - **ForceTopmost timer**: `System.Timers.Timer.Elapsed` runs on thread pool; `SetWindowPos` from non-UI thread is safe for USER32 operations but ensure the HWND remains valid.
 - **SkiaSharp alpha**: `SKAlphaType.Premul` is required for `UpdateLayeredWindow` with `AC_SRC_ALPHA`. Using `Unpremul` causes rendering artifacts.
+- **MainViewModel.Dispose()**: Must be called on exit. `_saveDebounceTimer` holds references to the Dispatcher. `SaveSettings()` checks `_disposed` flag before calling `timer.Stop()` to avoid `ObjectDisposedException` from stray timer callbacks. On exit: `Dispose()` first, then `SaveSettings()`.
+- **SettingsService.SaveForWidget()**: Writes to Widget's LocalState folder. The path `CrosshairOverlayWidget_ttvw7j9e3pmmp` is the package family name — if the Widget certificate changes, this path changes.
+- **Widget DisplayInformation cache**: `_cachedCenterX/Y` are captured once in `OnPageLoaded` and never refreshed. If the user changes their monitor resolution while the Widget is open, the cached values become stale. Solution: reopen the Widget.

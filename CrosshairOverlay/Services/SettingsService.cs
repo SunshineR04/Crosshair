@@ -12,6 +12,12 @@ public class SettingsService
 
     private static readonly string SettingsFile = Path.Combine(AppDataDir, "settings.json");
 
+    private static readonly string WidgetLocalStateDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Packages", "CrosshairOverlayWidget_ttvw7j9e3pmmp", "LocalState");
+
+    private static readonly string WidgetSettingsFile = Path.Combine(WidgetLocalStateDir, "widget_settings.json");
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -39,5 +45,17 @@ public class SettingsService
         Directory.CreateDirectory(AppDataDir);
         var json = JsonSerializer.Serialize(profile, JsonOptions);
         File.WriteAllText(SettingsFile, json);
+        SaveForWidget(profile);
+    }
+
+    public void SaveForWidget(CrosshairProfile profile)
+    {
+        try
+        {
+            Directory.CreateDirectory(WidgetLocalStateDir);
+            var json = JsonSerializer.Serialize(profile, JsonOptions);
+            File.WriteAllText(WidgetSettingsFile, json);
+        }
+        catch { }
     }
 }
