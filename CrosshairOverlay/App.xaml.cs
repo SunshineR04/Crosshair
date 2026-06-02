@@ -32,9 +32,16 @@ public partial class App : System.Windows.Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         base.OnStartup(e);
 
+        DispatcherUnhandledException += (s, ex) =>
+        {
+            if (ex.Exception is COMException comEx && comEx.ErrorCode == unchecked((int)0x80263001))
+                ex.Handled = true;
+        };
+
         _settingsService = new SettingsService();
         var renderer = new CrosshairRenderer();
         var profile = _settingsService.Load();
+        _settingsService.SaveForWidget(profile);
 
         var useForceTopmost = profile.ExclusiveFullscreenMode && AdminElevationHelper.IsRunningAsAdmin();
         if (profile.ExclusiveFullscreenMode && !AdminElevationHelper.IsRunningAsAdmin())

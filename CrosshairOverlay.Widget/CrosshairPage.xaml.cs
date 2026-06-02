@@ -16,9 +16,9 @@ namespace CrosshairOverlay.Widget
     {
         private CrosshairProfile _profile = new CrosshairProfile();
         private DispatcherTimer _syncTimer;
+        private DispatcherTimer _renderRetryTimer;
         private string _lastJson = string.Empty;
-        private double _cachedCenterX = -1;
-        private double _cachedCenterY = -1;
+        private bool _rendered;
 
         public CrosshairPage()
         {
@@ -33,19 +33,40 @@ namespace CrosshairOverlay.Widget
         {
             AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
             StopSyncTimer();
+            if (_renderRetryTimer != null)
+            {
+                _renderRetryTimer.Stop();
+                _renderRetryTimer = null;
+            }
         }
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var di = Windows.Graphics.Display.DisplayInformation.GetForCurrentView();
-                _cachedCenterX = di.ScreenWidthInRawPixels / 2.0;
-                _cachedCenterY = di.ScreenHeightInRawPixels / 2.0;
-            }
-            catch { }
-            RenderCrosshair();
             StartSyncTimer();
+            TryRenderOrRetry();
+        }
+
+        private void TryRenderOrRetry()
+        {
+            RenderCrosshair();
+            if (!_rendered)
+            {
+                if (_renderRetryTimer == null)
+                {
+                    _renderRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                    _renderRetryTimer.Tick += OnRenderRetryTick;
+                }
+                _renderRetryTimer.Start();
+            }
+        }
+
+        private void OnRenderRetryTick(object sender, object e)
+        {
+            RenderCrosshair();
+            if (_rendered)
+            {
+                _renderRetryTimer.Stop();
+            }
         }
 
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -109,9 +130,11 @@ namespace CrosshairOverlay.Widget
         {
             CrosshairCanvas.Children.Clear();
 
-            double cx = _cachedCenterX > 0 ? _cachedCenterX : ActualWidth / 2.0;
-            double cy = _cachedCenterY > 0 ? _cachedCenterY : ActualHeight / 2.0;
+            double cx = ActualWidth / 2.0;
+            double cy = ActualHeight / 2.0;
             if (cx <= 0 || cy <= 0) return;
+
+            _rendered = true;
 
             var baseColor = ParseColor(_profile.Color, _profile.Opacity);
             var outlineColor = ParseColor(_profile.OutlineColor, _profile.Opacity);
