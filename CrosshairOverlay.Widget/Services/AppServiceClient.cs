@@ -15,7 +15,7 @@ namespace CrosshairOverlay.Widget.Services
 
         public void Initialize(AppServiceConnection connection, Windows.ApplicationModel.Background.BackgroundTaskDeferral deferral)
         {
-            connection.RequestReceived += async (sender, args) =>
+            connection.RequestReceived += (sender, args) =>
             {
                 var d = args.GetDeferral();
                 try

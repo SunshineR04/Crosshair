@@ -164,14 +164,12 @@ public partial class App : System.Windows.Application
         if (!NativeMethods.RegisterHotKey(hwnd, _toggleHotkeyId,
                 NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT, NativeMethods.VK_X))
         {
-            var err = Marshal.GetLastWin32Error();
             _hotkeyOk = false;
         }
 
         if (!NativeMethods.RegisterHotKey(hwnd, _settingsHotkeyId,
                 NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT, NativeMethods.VK_OEM_3))
         {
-            var err = Marshal.GetLastWin32Error();
             _hotkeyOk = false;
         }
     }
@@ -239,7 +237,6 @@ public partial class App : System.Windows.Application
         _hotkeyWindow?.Close();
 
         _overlayHost?.Dispose();
-        _viewModel?.Dispose();
         _appServiceServer?.Dispose();
 
         if (_notifyIcon != null)

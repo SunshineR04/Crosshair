@@ -19,6 +19,7 @@ namespace CrosshairOverlay.Widget
         private DispatcherTimer _renderRetryTimer;
         private string _lastJson = string.Empty;
         private bool _rendered;
+        private int _retryCount;
 
         public CrosshairPage()
         {
@@ -49,8 +50,9 @@ namespace CrosshairOverlay.Widget
         private void TryRenderOrRetry()
         {
             RenderCrosshair();
-            if (!_rendered)
+            if (!_rendered && _retryCount < 10)
             {
+                _retryCount++;
                 if (_renderRetryTimer == null)
                 {
                     _renderRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -62,8 +64,9 @@ namespace CrosshairOverlay.Widget
 
         private void OnRenderRetryTick(object sender, object e)
         {
+            _retryCount++;
             RenderCrosshair();
-            if (_rendered)
+            if (_rendered || _retryCount >= 10)
             {
                 _renderRetryTimer.Stop();
             }
@@ -81,8 +84,11 @@ namespace CrosshairOverlay.Widget
 
         private void OnProfileUpdated(CrosshairProfile profile)
         {
-            _profile = profile;
-            Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, RenderCrosshair);
+            Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                _profile = profile;
+                RenderCrosshair();
+            });
         }
 
         private void StartSyncTimer()
