@@ -1,5 +1,6 @@
 using System;
 using Windows.Foundation;
+using Windows.Graphics.Display;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Xaml;
@@ -20,6 +21,10 @@ namespace CrosshairOverlay.Widget
         private string _lastJson = string.Empty;
         private bool _rendered;
         private int _retryCount;
+        private XboxGameBarWidget _widget;
+        private double _rawPixelsPerViewPixel = 1.0;
+        private double _screenCenterRawX;
+        private double _screenCenterRawY;
 
         public CrosshairPage()
         {
@@ -33,6 +38,10 @@ namespace CrosshairOverlay.Widget
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
             AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
+            if (_widget != null)
+            {
+                _widget.WindowBoundsChanged -= OnWindowBoundsChanged;
+            }
             StopSyncTimer();
             if (_renderRetryTimer != null)
             {
@@ -43,6 +52,14 @@ namespace CrosshairOverlay.Widget
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+            try
+            {
+                var di = DisplayInformation.GetForCurrentView();
+                _rawPixelsPerViewPixel = di.RawPixelsPerViewPixel;
+                _screenCenterRawX = di.ScreenWidthInRawPixels / 2.0;
+                _screenCenterRawY = di.ScreenHeightInRawPixels / 2.0;
+            }
+            catch { }
             StartSyncTimer();
             TryRenderOrRetry();
         }
@@ -78,6 +95,17 @@ namespace CrosshairOverlay.Widget
         }
 
         protected override void OnNavigatedTo(Windows.UI.Xaml.Navigation.NavigationEventArgs e)
+        {
+            if (e.Parameter is XboxGameBarWidget widget)
+            {
+                _widget = widget;
+                _widget.WindowBoundsChanged += OnWindowBoundsChanged;
+                _widget.CenterWindowAsync();
+            }
+            RenderCrosshair();
+        }
+
+        private void OnWindowBoundsChanged(XboxGameBarWidget sender, object args)
         {
             RenderCrosshair();
         }
@@ -138,6 +166,22 @@ namespace CrosshairOverlay.Widget
 
             double cx = ActualWidth / 2.0;
             double cy = ActualHeight / 2.0;
+
+            if (_widget != null && _screenCenterRawX > 0 && _screenCenterRawY > 0)
+            {
+                var bounds = _widget.WindowBounds;
+                double screenCenterViewX = _screenCenterRawX / _rawPixelsPerViewPixel;
+                double screenCenterViewY = _screenCenterRawY / _rawPixelsPerViewPixel;
+                double offsetX = screenCenterViewX - bounds.X;
+                double offsetY = screenCenterViewY - bounds.Y;
+
+                if (offsetX > 0 && offsetX < ActualWidth && offsetY > 0 && offsetY < ActualHeight)
+                {
+                    cx = offsetX;
+                    cy = offsetY;
+                }
+            }
+
             if (cx <= 0 || cy <= 0) return;
 
             _rendered = true;
