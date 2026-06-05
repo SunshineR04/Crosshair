@@ -102,6 +102,11 @@ namespace CrosshairOverlay.Widget
                 _widget.WindowBoundsChanged += OnWindowBoundsChanged;
                 _widget.CenterWindowAsync();
             }
+            if (_renderRetryTimer != null)
+            {
+                _renderRetryTimer.Stop();
+                _renderRetryTimer = null;
+            }
             _rendered = false;
             _retryCount = 0;
             RenderCrosshair();
