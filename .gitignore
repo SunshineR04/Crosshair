@@ -61,3 +61,4 @@ $env:TEMP\widget_*
 ## Rider
 .idea/
 *.sln.iml
+.codegraph/
