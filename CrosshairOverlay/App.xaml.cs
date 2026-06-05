@@ -227,8 +227,8 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _viewModel?.Dispose();
         _viewModel?.SaveSettings();
+        _viewModel?.Dispose();
 
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _toggleHotkeyId);
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _settingsHotkeyId);

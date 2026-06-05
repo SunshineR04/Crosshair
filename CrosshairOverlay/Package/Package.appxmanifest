@@ -32,7 +32,7 @@
 
     <!-- ===== WPF Desktop App (fullTrust) ===== -->
     <Application Id="DesktopApp"
-                 Executable="CrosshairOverlay.exe"
+                 Executable="DesktopApp\CrosshairOverlay.exe"
                  EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Crosshair Overlay"
@@ -44,7 +44,7 @@
       </uap:VisualElements>
       <Extensions>
         <desktop:Extension Category="windows.fullTrustProcess"
-                           Executable="CrosshairOverlay.exe" />
+                           Executable="DesktopApp\CrosshairOverlay.exe" />
       </Extensions>
     </Application>
 
@@ -78,8 +78,10 @@
                 <Window>
                   <AllowForegroundTransparency>true</AllowForegroundTransparency>
                   <Size>
-                    <Height>1080</Height>
-                    <Width>1920</Width>
+                    <Height>2160</Height>
+                    <Width>3840</Width>
+                    <MaxHeight>4320</MaxHeight>
+                    <MaxWidth>7680</MaxWidth>
                   </Size>
                 </Window>
               </GameBarWidget>

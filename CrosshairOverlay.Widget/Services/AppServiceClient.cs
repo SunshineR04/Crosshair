@@ -9,7 +9,7 @@ namespace CrosshairOverlay.Widget.Services
     {
         public static AppServiceClient Instance { get; } = new AppServiceClient();
 
-        public event Action<CrosshairProfile>? ProfileUpdated;
+        public event Action<CrosshairProfile> ProfileUpdated;
 
         private AppServiceClient() { }
 

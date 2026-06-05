@@ -66,6 +66,8 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 _overlayHost.Hide();
             }
+            _profile.IsVisible = _isVisible;
+            _settingsService.SaveForWidget(_profile);
         }
     }
 

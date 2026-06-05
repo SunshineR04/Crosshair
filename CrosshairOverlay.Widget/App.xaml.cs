@@ -12,7 +12,7 @@ namespace CrosshairOverlay.Widget
 {
     sealed partial class App : Application
     {
-        private XboxGameBarWidget? _widget;
+        private XboxGameBarWidget _widget = null!;
 
         public App()
         {

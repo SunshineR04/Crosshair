@@ -196,7 +196,19 @@ public class OverlayHost : IDisposable
         using var bitmap = _renderer.Render(_profile);
 
         var screenDc = NativeMethods.GetDC(IntPtr.Zero);
+        if (screenDc == IntPtr.Zero)
+        {
+            System.Diagnostics.Debug.WriteLine("[OverlayHost] GetDC failed");
+            return;
+        }
+
         _memDc = NativeMethods.CreateCompatibleDC(screenDc);
+        if (_memDc == IntPtr.Zero)
+        {
+            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+            System.Diagnostics.Debug.WriteLine("[OverlayHost] CreateCompatibleDC failed");
+            return;
+        }
 
         var bmi = new NativeMethods.BITMAPINFO
         {
@@ -214,13 +226,18 @@ public class OverlayHost : IDisposable
         IntPtr bits;
         _hBitmap = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
 
-        if (_hBitmap != IntPtr.Zero && bits != IntPtr.Zero)
+        if (_hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
         {
-            Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
+            NativeMethods.DeleteDC(_memDc);
+            _memDc = IntPtr.Zero;
+            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+            System.Diagnostics.Debug.WriteLine($"[OverlayHost] CreateDIBSection failed: {Marshal.GetLastWin32Error()}");
+            return;
         }
 
-        if (_hBitmap != IntPtr.Zero)
-            NativeMethods.SelectObject(_memDc, _hBitmap);
+        Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
+
+        NativeMethods.SelectObject(_memDc, _hBitmap);
         NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
 
         var blend = new NativeMethods.BLENDFUNCTION
@@ -245,16 +262,11 @@ public class OverlayHost : IDisposable
 
         var pptSrc = new NativeMethods.POINT { x = 0, y = 0 };
 
-        NativeMethods.UpdateLayeredWindow(
-            _hwnd,
-            IntPtr.Zero,
-            ref pptDst,
-            ref psize,
-            _memDc,
-            ref pptSrc,
-            0,
-            ref blend,
-            NativeMethods.ULW_ALPHA);
+        if (!NativeMethods.UpdateLayeredWindow(
+            _hwnd, IntPtr.Zero, ref pptDst, ref psize, _memDc, ref pptSrc, 0, ref blend, NativeMethods.ULW_ALPHA))
+        {
+            System.Diagnostics.Debug.WriteLine($"[OverlayHost] UpdateLayeredWindow failed: {Marshal.GetLastWin32Error()}");
+        }
     }
 
     private void CleanupGdi()

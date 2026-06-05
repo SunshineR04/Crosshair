@@ -9,6 +9,7 @@ namespace CrosshairOverlay.Services;
 public class AppServiceServer : IDisposable
 {
     private AppServiceConnection? _connection;
+    private CrosshairProfile? _pendingProfile;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -35,18 +36,29 @@ public class AppServiceServer : IDisposable
                 System.Diagnostics.Debug.WriteLine($"[AppService] Connection failed: {status}");
                 _connection.Dispose();
                 _connection = null;
+                return;
+            }
+
+            if (_pendingProfile != null)
+            {
+                await PushProfile(_pendingProfile);
+                _pendingProfile = null;
             }
         }
-        catch
+        catch (System.Exception ex)
         {
-            // Not running in MSIX context
+            System.Diagnostics.Debug.WriteLine($"[AppService] Initialize failed: {ex.Message}");
             _connection = null;
         }
     }
 
     public async Task PushProfile(CrosshairProfile profile)
     {
-        if (_connection == null) return;
+        if (_connection == null)
+        {
+            _pendingProfile = profile;
+            return;
+        }
 
         try
         {
@@ -58,8 +70,9 @@ public class AppServiceServer : IDisposable
             };
             await _connection.SendMessageAsync(msg);
         }
-        catch
+        catch (System.Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[AppService] PushProfile failed: {ex.Message}");
         }
     }
 

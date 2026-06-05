@@ -56,6 +56,9 @@ public class SettingsService
             var json = JsonSerializer.Serialize(profile, JsonOptions);
             File.WriteAllText(WidgetSettingsFile, json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] SaveForWidget failed: {ex.Message}");
+        }
     }
 }

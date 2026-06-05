@@ -100,7 +100,7 @@ namespace CrosshairOverlay.Widget
             {
                 _widget = widget;
                 _widget.WindowBoundsChanged += OnWindowBoundsChanged;
-                _widget.CenterWindowAsync();
+                _widget.CenterWindowAsync();  // fire-and-forget: centering is best-effort
             }
             if (_renderRetryTimer != null)
             {
@@ -119,7 +119,7 @@ namespace CrosshairOverlay.Widget
 
         private void OnProfileUpdated(CrosshairProfile profile)
         {
-            Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
                 _profile = profile;
                 RenderCrosshair();
@@ -163,13 +163,26 @@ namespace CrosshairOverlay.Widget
                     _profile = profile;
                     RenderCrosshair();
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[Widget] widget_settings.json deserialized to null");
+                }
             }
-            catch { }
+            catch (System.IO.FileNotFoundException)
+            {
+                // Widget first launch — file may not exist yet
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Widget] LoadSettings failed: {ex.Message}");
+            }
         }
 
         private void RenderCrosshair()
         {
             CrosshairCanvas.Children.Clear();
+
+            if (!_profile.IsVisible) return;
 
             double cx = ActualWidth / 2.0;
             double cy = ActualHeight / 2.0;
