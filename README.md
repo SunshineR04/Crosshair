@@ -13,11 +13,15 @@
 - **Simple Overlay** — 窗口化/无边框全屏下显示准心，`Alt+X` 一键切换
 - **Real Overlay（管理员）** — FSO 独占全屏下显示准心，使用管理员权限覆盖游戏窗口
 - **Game Bar Widget** — 基于 Xbox Game Bar 的准心组件，支持真正的独占全屏（包括 Vulkan 游戏）
+- **Widget 准心自动居中** — 基于 WindowBounds API + DisplayInformation，自动适应所有分辨率/比例/DPI
+- **Widget 设置同步** — 桌面端修改样式后 2 秒内自动同步到 Widget
+- **Widget 显示/隐藏同步** — `Alt+X` 切换准心可见性自动同步到 Widget
 - **6 种准心样式** — 十字、圆点、十字+圆点、圆环、圆环+圆点、实心轮廓
 - **完全自定义** — 颜色、粗细、长度、间距、透明度、轮廓描边
 - **全局快捷键** — `Alt+X` 显示/隐藏准心，`Alt+`` 打开设置
 - **系统托盘** — 最小化到托盘运行，右键菜单快速切换
 - **配置持久化** — 设置自动保存到 `%APPDATA%\CrosshairOverlay\settings.json`
+- **DWM 异常保护** — 重启后桌面合成器未就绪时不再崩溃
 
 ---
 
@@ -26,15 +30,16 @@
 ### 桌面叠加层（推荐）
 
 ```
-1. 解压 Release → 双击 CrosshairOverlay.exe
-2. 按 Alt+X 显示准心
-3. 进游戏设置为「窗口化全屏（无边框）」模式
+1. 下载 zip → 解压
+2. 双击 setup.bat → 完成安装
+3. 按 Alt+X 显示准心
+4. 进游戏设置为「窗口化全屏（无边框）」模式
 ```
 
 ### Game Bar Widget（独占全屏）
 
 ```
-1. 管理员运行 install.ps1
+1. 双击 setup.bat → 自动安装证书和 Widget
 2. 按 Win+G 打开 Xbox Game Bar
 3. 在 Widget 菜单中选择「准心叠加层」
 4. 固定 📌 → 关闭 Game Bar 后准心仍可见
@@ -43,6 +48,13 @@
 ```
 
 > ⚠️ **重要**：固定后必须启用点击穿透，否则 Widget 窗口会拦截鼠标操作，导致桌面对应区域无法点击。启用后所有鼠标事件将穿透 Widget 直达底层游戏/桌面。
+
+---
+
+## 下载
+
+- **GitHub**: [v1.1.0 Release](https://github.com/SunshineR04/Crosshair/releases/download/v1.1.0/CrosshairOverlay_v1.1.0_Setup.zip)（83 MB）
+- **Gitee（国内加速）**: [v1.1.0 Release](https://gitee.com/sr17786628446/CrosshairOverlay/releases)
 
 ---
 
@@ -101,10 +113,6 @@ CrosshairOverlay/
 │   ├── Services/
 │   │   └── AppServiceClient.cs     # IPC 客户端
 │   └── Package.appxmanifest        # Game Bar 扩展声明
-│
-└── CrosshairOverlay.Package/       # MSIX 打包
-    ├── CrosshairOverlay.Package.wapproj
-    └── Package.appxmanifest        # 合并清单
 ```
 
 ---
@@ -115,7 +123,7 @@ CrosshairOverlay/
 |------|------|
 | 桌面应用 | C# / .NET 8 / WPF / SkiaSharp |
 | Game Bar Widget | C# / UWP / .NET Native |
-| 跨进程通信 | AppServiceConnection (WinRT IPC) |
+| 跨进程通信 | AppServiceConnection (WinRT IPC) + 文件同步 fallback |
 | 窗口叠加 | Win32 API / UpdateLayeredWindow |
 | 配置持久化 | System.Text.Json |
 | 打包 | MSIX / Desktop Bridge |
@@ -129,8 +137,7 @@ CrosshairOverlay/
 dotnet build CrosshairOverlay
 
 # Game Bar Widget（需要 VS 2019+ + UWP 工作负荷）
-cd CrosshairOverlay.Widget
-msbuild CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64
+& "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe" CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64
 
 # 发布（自包含）
 dotnet publish CrosshairOverlay -c Release -r win-x64 --self-contained true

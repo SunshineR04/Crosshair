@@ -102,11 +102,11 @@ The Widget reads this file every 2 seconds via a `DispatcherTimer` in `Crosshair
 
 After building, create a zip containing:
 ```
-CrosshairOverlay_v1.0.0.zip
+CrosshairOverlay_v1.1.0_Setup.zip
 ├── CrosshairOverlay/        ← self-contained publish (198 MB)
 ├── CrosshairOverlayWidget.msix
 ├── CrosshairOverlayWidget.cer
-└── install.ps1
+└── setup.bat                ← 双击安装（安装证书 + Widget + 启动桌面端）
 ```
 
 ## Config & storage
@@ -123,6 +123,6 @@ CrosshairOverlay_v1.0.0.zip
 - **EnumWindows on Widget HWND**: The Widget's CoreWindow is invisible to Win32 `EnumWindows`. Do not attempt `WidgetPositioner`-style scanning.
 - **ForceTopmost timer**: `System.Timers.Timer.Elapsed` runs on thread pool; `SetWindowPos` from non-UI thread is safe for USER32 operations but ensure the HWND remains valid.
 - **SkiaSharp alpha**: `SKAlphaType.Premul` is required for `UpdateLayeredWindow` with `AC_SRC_ALPHA`. Using `Unpremul` causes rendering artifacts.
-- **MainViewModel.Dispose()**: Must be called on exit. `_saveDebounceTimer` holds references to the Dispatcher. `SaveSettings()` checks `_disposed` flag before calling `timer.Stop()` to avoid `ObjectDisposedException` from stray timer callbacks. On exit: `Dispose()` first, then `SaveSettings()`.
+- **MainViewModel.Dispose()**: Must be called on exit. `_saveDebounceTimer` holds references to the Dispatcher. `SaveSettings()` checks `_disposed` flag before calling `timer.Stop()` to avoid `ObjectDisposedException` from stray timer callbacks. On exit: `SaveSettings()` first, then `Dispose()`.
 - **SettingsService.SaveForWidget()**: Writes to Widget's LocalState folder. The path `CrosshairOverlayWidget_ttvw7j9e3pmmp` is the package family name — if the Widget certificate changes, this path changes.
 - **Widget DisplayInformation cache**: `_cachedCenterX/Y` are captured once in `OnPageLoaded` and never refreshed. If the user changes their monitor resolution while the Widget is open, the cached values become stale. Solution: reopen the Widget.
