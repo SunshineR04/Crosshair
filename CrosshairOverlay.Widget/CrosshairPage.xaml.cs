@@ -320,11 +320,13 @@ namespace CrosshairOverlay.Widget
         {
             try
             {
+                if (string.IsNullOrEmpty(hex) || hex.Length < 7) return Colors.Lime;
                 if (hex.StartsWith("#")) hex = hex.Substring(1);
+                if (hex.Length < 6) return Colors.Lime;
                 byte r = Convert.ToByte(hex.Substring(0, 2), 16);
                 byte g = Convert.ToByte(hex.Substring(2, 2), 16);
                 byte b = Convert.ToByte(hex.Substring(4, 2), 16);
-                byte a = (byte)(255 * opacity);
+                byte a = (byte)(Math.Max(0, Math.Min(1, opacity)) * 255);
                 return Color.FromArgb(a, r, g, b);
             }
             catch { return Colors.Lime; }

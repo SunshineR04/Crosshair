@@ -34,8 +34,9 @@ public class SettingsService
             var json = File.ReadAllText(SettingsFile);
             return JsonSerializer.Deserialize<CrosshairProfile>(json, JsonOptions) ?? new CrosshairProfile();
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Load failed: {ex.Message}");
             return new CrosshairProfile();
         }
     }
