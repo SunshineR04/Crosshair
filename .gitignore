@@ -48,6 +48,12 @@ CrosshairOverlay/Package/*.appx
 ## Temp extraction
 $env:TEMP\widget_*
 
+## Build artifacts
+BundleArtifacts/
+
+## Agent plans
+.mimocode/
+
 ## Certificate (local dev)
 *.pfx
 *.cer

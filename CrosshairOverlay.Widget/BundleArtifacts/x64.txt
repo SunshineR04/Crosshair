@@ -1,2 +1,0 @@
-MainPackage=C:\Users\Administrator\Documents\opencode project\demo2\CrosshairOverlay.Widget\bin\x64\Release\CrosshairOverlay.Widget_1.0.0.0_x64.msix
-SymbolPackage=C:\Users\Administrator\Documents\opencode project\demo2\CrosshairOverlay.Widget\obj\x64\Release\Symbols\CrosshairOverlay.Widget_1.0.0.0_x64.appxsym
