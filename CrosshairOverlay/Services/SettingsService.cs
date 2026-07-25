@@ -4,7 +4,7 @@ using CrosshairOverlay.Models;
 
 namespace CrosshairOverlay.Services;
 
-public class SettingsService
+public class SettingsService : ISettingsService
 {
     public static readonly string AppDataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -36,7 +36,7 @@ public class SettingsService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SettingsService] Load failed: {ex.Message}");
+            LogService.Error("Settings load failed, using defaults", ex);
             return new CrosshairProfile();
         }
     }
@@ -46,7 +46,6 @@ public class SettingsService
         Directory.CreateDirectory(AppDataDir);
         var json = JsonSerializer.Serialize(profile, JsonOptions);
         File.WriteAllText(SettingsFile, json);
-        SaveForWidget(profile);
     }
 
     public void SaveForWidget(CrosshairProfile profile)
@@ -59,7 +58,7 @@ public class SettingsService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SettingsService] SaveForWidget failed: {ex.Message}");
+            LogService.Warn($"SaveForWidget failed: {ex.Message}");
         }
     }
 }

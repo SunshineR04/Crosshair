@@ -5,8 +5,7 @@
         Width="480" Height="540"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
-        Closing="Window_Closing"
-        Topmost="True">
+        Closing="Window_Closing">
 
     <Window.Resources>
         <Style TargetType="Label">
@@ -54,7 +53,7 @@
                     <StackPanel Orientation="Horizontal">
                         <Label Content="透明度" Margin="0,6,10,2"/>
                         <Slider Minimum="0.1" Maximum="1.0" SmallChange="0.05" LargeChange="0.1"
-                                Value="{Binding OpacityValue, Mode=TwoWay}" Width="200"/>
+                                Value="{Binding OpacityValue, Mode=TwoWay, Delay=80}" Width="200"/>
                         <TextBlock Text="{Binding OpacityValue, StringFormat={}{0:P0}}"
                                    VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
@@ -65,26 +64,26 @@
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Label Content="线条粗细" Width="80"/>
-                        <Slider Minimum="1" Maximum="10" SmallChange="1" LargeChange="2"
-                                Value="{Binding ThicknessValue, Mode=TwoWay}" Width="160"/>
+                        <Slider Minimum="1" Maximum="10" SmallChange="1" LargeChange="2" IsSnapToTickEnabled="True"
+                                Value="{Binding ThicknessValue, Mode=TwoWay, Delay=80}" Width="160"/>
                         <TextBlock Text="{Binding ThicknessValue}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Label Content="长度" Width="80"/>
-                        <Slider Minimum="4" Maximum="80" SmallChange="2" LargeChange="8"
-                                Value="{Binding SizeValue, Mode=TwoWay}" Width="160"/>
+                        <Slider Minimum="4" Maximum="80" SmallChange="2" LargeChange="8" IsSnapToTickEnabled="True"
+                                Value="{Binding SizeValue, Mode=TwoWay, Delay=80}" Width="160"/>
                         <TextBlock Text="{Binding SizeValue}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Label Content="间距" Width="80"/>
-                        <Slider Minimum="0" Maximum="30" SmallChange="1" LargeChange="5"
-                                Value="{Binding GapValue, Mode=TwoWay}" Width="160"/>
+                        <Slider Minimum="0" Maximum="30" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True"
+                                Value="{Binding GapValue, Mode=TwoWay, Delay=80}" Width="160"/>
                         <TextBlock Text="{Binding GapValue}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Label Content="圆点大小" Width="80"/>
-                        <Slider Minimum="2" Maximum="30" SmallChange="1" LargeChange="5"
-                                Value="{Binding DotSizeValue, Mode=TwoWay}" Width="160"/>
+                        <Slider Minimum="2" Maximum="30" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True"
+                                Value="{Binding DotSizeValue, Mode=TwoWay, Delay=80}" Width="160"/>
                         <TextBlock Text="{Binding DotSizeValue}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                 </StackPanel>
@@ -100,8 +99,8 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Label Content="描边宽" Width="80"/>
-                        <Slider Minimum="1" Maximum="5" SmallChange="1" LargeChange="1"
-                                Value="{Binding OutlineThicknessValue, Mode=TwoWay}" Width="160"/>
+                        <Slider Minimum="1" Maximum="5" SmallChange="1" LargeChange="1" IsSnapToTickEnabled="True"
+                                Value="{Binding OutlineThicknessValue, Mode=TwoWay, Delay=80}" Width="160"/>
                         <TextBlock Text="{Binding OutlineThicknessValue}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                 </StackPanel>
@@ -114,6 +113,19 @@
                     </TextBlock>
                     <TextBlock>
                         <Run Text="打开设置: "/><Run Text="{Binding OpenSettingsHotkey}" FontWeight="Bold"/>
+                    </TextBlock>
+                    <TextBlock Margin="0,6,0,0" FontSize="11">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="Green"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HotkeyRegistered}" Value="False">
+                                        <Setter Property="Foreground" Value="#E81123"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="● "/><Run Text="{Binding HotkeyStatusText, Mode=OneWay}"/>
                     </TextBlock>
                 </StackPanel>
             </GroupBox>

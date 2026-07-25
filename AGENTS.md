@@ -1,4 +1,6 @@
-# AGENTS.md — Crosshair Overlay
+# AGENTS.md
+
+This file provides guidance to Qoder (qoder.com) when working with code in this repository.
 
 ## 项目概述
 
@@ -22,6 +24,8 @@ dotnet publish CrosshairOverlay -c Release -r win-x64 --self-contained true
 
 WPF 项目使用 `net8.0-windows10.0.19041.0` — WinRT API (`AppServiceConnection`、`Package.Current`) 需要此 TFM，且仅在 MSIX 包内运行时可用。
 
+项目无测试、无 lint 配置。验证方式为 `dotnet build CrosshairOverlay` 编译通过 + 手动运行。
+
 ## 架构
 
 ### 三种叠加模式
@@ -36,10 +40,17 @@ WPF 项目使用 `net8.0-windows10.0.19041.0` — WinRT API (`AppServiceConnecti
 
 - `App.xaml.cs` — 应用启动、热键注册（Win32 消息窗口）、托盘图标、AppService 初始化、DWM 异常处理
 - `MainWindow.xaml` — 设置界面（6 种准心样式、颜色/大小/透明度滑块、叠加模式切换）
-- `ViewModels/MainViewModel.cs` — MVVM 绑定；`ApplyProfile()` 推送设置到 OverlayHost 和 Widget
+- `ViewModels/MainViewModel.cs` — MVVM 绑定 + `RelayCommand`（内联定义）；`ApplyProfile()` 推送设置到 OverlayHost 和 Widget
 - `OverlayHost.cs` — 通过 `CreateWindowEx` + `UpdateLayeredWindow` 创建分层透明叠加窗口
 - `CrosshairRenderer.cs` — SkiaSharp 矢量渲染（6 种样式、描边、预乘 alpha）
 - `CrosshairPage.xaml.cs`（Widget）— UWP XAML Shapes 渲染、WindowBounds 自动居中、文件轮询同步
+
+### 框架级设计决策
+
+- **`ShutdownMode.OnExplicitShutdown`**：应用是托盘常驻型，关闭设置窗口不退出进程，只有托盘「退出」或 `Current.Shutdown()` 才终止。
+- **WinForms 依赖**（`UseWindowsForms=true`）：仅用于 `NotifyIcon` + `ContextMenuStrip` 实现系统托盘，无其他 WinForms 用途。
+- **JSON 序列化器差异**：WPF 端用 `System.Text.Json`，Widget 端用 `Newtonsoft.Json`（UWP 兼容性约束）。两端共享相同的 `CrosshairProfile` POCO 字段，序列化结果互通。
+- **DWM 异常保护**：`DispatcherUnhandledException` 捕获 `0x80263001`（DWM 未就绪），防止系统重启后崩溃。
 
 ### 热键机制
 
@@ -131,7 +142,7 @@ CrosshairOverlay_v1.1.0_Setup.zip
 
 ## 已知陷阱
 
-- **管理员重启热键竞争**：切换 Real Overlay 时，非管理员进程必须先 `UnregisterHotKey` 再启动管理员进程。管理员进程的 5 次重试（1 秒间隔）解决 `ERROR_HOTKEY_ALREADY_REGISTERED (1409)`。
+- **管理员重启热键竞争**：切换 Real Overlay 时，非管理员进程必须先 `UnregisterHotKey` 再启动管理员进程（见 `OnRestartRequested`）。新进程启动时旧进程可能尚未完全退出，`RegisterHotKey` 可能返回 `ERROR_HOTKEY_ALREADY_REGISTERED (1409)`。当前代码无重试逻辑，注册失败时 `_hotkeyOk=false` 并提示用户使用托盘菜单。
 - **Game Bar Widget 点击穿透**：固定的小部件默认拦截鼠标输入。用户必须点击 Game Bar Home Bar 上的鼠标图标启用点击穿透。manifest 声明 `PinningSupported=true` 即可支持。
 - **EnumWindows 与 Widget HWND**：Widget 的 CoreWindow 对 Win32 `EnumWindows` 不可见。不要尝试 `WidgetPositioner` 式扫描。
 - **ForceTopmost 定时器**：`System.Timers.Timer.Elapsed` 在线程池运行；从非 UI 线程调用 `SetWindowPos` 对 USER32 操作是安全的，但确保 HWND 有效。

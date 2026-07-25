@@ -9,8 +9,12 @@ namespace CrosshairOverlay.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    private readonly OverlayHost _overlayHost;
-    private readonly SettingsService _settingsService;
+    /// <summary>
+    /// 设置保存防抖间隔（毫秒）。滑块拖动期间避免每次变更都写磁盘。
+    /// </summary>
+    private const int SaveDebounceIntervalMs = 400;
+    private readonly IOverlayHost _overlayHost;
+    private readonly ISettingsService _settingsService;
     private readonly AppServiceServer? _appServiceServer;
 
     private CrosshairProfile _profile;
@@ -120,13 +124,15 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _colorHex = value;
             OnPropertyChanged();
-            try
+            var normalized = NormalizeColorHex(value);
+            if (normalized != null)
             {
-                _ = System.Windows.Media.ColorConverter.ConvertFromString(value);
-                Profile.Color = value;
+                Profile.Color = normalized;
+                _colorHex = normalized;
+                OnPropertyChanged();
                 ApplyProfile();
             }
-            catch
+            else
             {
                 _colorHex = Profile.Color;
                 OnPropertyChanged();
@@ -178,17 +184,38 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _outlineColorHex = value;
             OnPropertyChanged();
-            try
+            var normalized = NormalizeColorHex(value);
+            if (normalized != null)
             {
-                _ = System.Windows.Media.ColorConverter.ConvertFromString(value);
-                Profile.OutlineColor = value;
+                Profile.OutlineColor = normalized;
+                _outlineColorHex = normalized;
+                OnPropertyChanged();
                 ApplyProfile();
             }
-            catch
+            else
             {
                 _outlineColorHex = Profile.OutlineColor;
                 OnPropertyChanged();
             }
+        }
+    }
+
+    /// <summary>
+    /// 将任意 WPF 支持的颜色格式（命名颜色、#RGB、#ARGB、#RRGGBB、#AARRGGBB）
+    /// 规范化为 #RRGGBB 格式，确保 Widget 端 ParseColor 能正确解析。
+    /// </summary>
+    /// <returns>规范化后的 #RRGGBB 字符串，无效输入返回 null。</returns>
+    private static string? NormalizeColorHex(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        try
+        {
+            var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(input);
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -217,6 +244,19 @@ public class MainViewModel : INotifyPropertyChanged
 
     public bool IsAdmin => AdminElevationHelper.IsRunningAsAdmin();
 
+    private bool _hotkeyRegistered = true;
+    /// <summary>全局热键是否注册成功。失败时 UI 应提示用户使用托盘菜单。</summary>
+    public bool HotkeyRegistered
+    {
+        get => _hotkeyRegistered;
+        set { _hotkeyRegistered = value; OnPropertyChanged(); OnPropertyChanged(nameof(HotkeyStatusText)); }
+    }
+
+    public string HotkeyStatusText =>
+        _hotkeyRegistered
+            ? "快捷键已就绪"
+            : "快捷键注册失败（可能被其他程序占用），请使用托盘菜单操作";
+
     public void ResetExclusiveFullscreen()
     {
         _useExclusiveFullscreen = false;
@@ -233,7 +273,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand MinimizeCommand { get; }
     public ICommand ExitCommand { get; }
 
-    public MainViewModel(OverlayHost overlayHost, SettingsService settingsService, CrosshairProfile profile, AppServiceServer? appServiceServer = null)
+    public MainViewModel(IOverlayHost overlayHost, ISettingsService settingsService, CrosshairProfile profile, AppServiceServer? appServiceServer = null)
     {
         _overlayHost = overlayHost;
         _settingsService = settingsService;
@@ -253,7 +293,7 @@ public class MainViewModel : INotifyPropertyChanged
         MinimizeCommand = new RelayCommand(() => CloseRequested?.Invoke());
         ExitCommand = new RelayCommand(() => System.Windows.Application.Current.Shutdown());
 
-        _saveDebounceTimer = new System.Timers.Timer(400) { AutoReset = false };
+        _saveDebounceTimer = new System.Timers.Timer(SaveDebounceIntervalMs) { AutoReset = false };
         _saveDebounceTimer.Elapsed += (_, _) =>
             System.Windows.Application.Current.Dispatcher.Invoke(() => SaveSettings());
     }
@@ -264,6 +304,7 @@ public class MainViewModel : INotifyPropertyChanged
             _saveDebounceTimer.Stop();
         _profile.IsVisible = _isVisible;
         _settingsService.Save(_profile);
+        _settingsService.SaveForWidget(_profile);
     }
 
     public void ToggleOverlay()

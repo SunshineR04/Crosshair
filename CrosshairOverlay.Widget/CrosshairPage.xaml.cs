@@ -15,6 +15,12 @@ namespace CrosshairOverlay.Widget
 {
     public sealed partial class CrosshairPage : Page
     {
+        /// <summary>文件同步轮询间隔（秒）</summary>
+        private const int FileSyncIntervalSeconds = 2;
+        /// <summary>渲染重试间隔（毫秒），等待 Widget 窗口尺寸就绪</summary>
+        private const int RenderRetryIntervalMs = 500;
+        /// <summary>最大渲染重试次数，超过后停止尝试</summary>
+        private const int MaxRenderRetries = 10;
         private CrosshairProfile _profile = new CrosshairProfile();
         private DispatcherTimer _syncTimer;
         private DispatcherTimer _renderRetryTimer;
@@ -59,7 +65,10 @@ namespace CrosshairOverlay.Widget
                 _screenCenterRawX = di.ScreenWidthInRawPixels / 2.0;
                 _screenCenterRawY = di.ScreenHeightInRawPixels / 2.0;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Widget] DisplayInformation init failed: {ex.Message}");
+            }
             StartSyncTimer();
             TryRenderOrRetry();
         }
@@ -67,12 +76,12 @@ namespace CrosshairOverlay.Widget
         private void TryRenderOrRetry()
         {
             RenderCrosshair();
-            if (!_rendered && _retryCount < 10)
+            if (!_rendered && _retryCount < MaxRenderRetries)
             {
                 _retryCount++;
                 if (_renderRetryTimer == null)
                 {
-                    _renderRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                    _renderRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(RenderRetryIntervalMs) };
                     _renderRetryTimer.Tick += OnRenderRetryTick;
                 }
                 _renderRetryTimer.Start();
@@ -83,7 +92,7 @@ namespace CrosshairOverlay.Widget
         {
             _retryCount++;
             RenderCrosshair();
-            if (_rendered || _retryCount >= 10)
+            if (_rendered || _retryCount >= MaxRenderRetries)
             {
                 _renderRetryTimer.Stop();
             }
@@ -121,6 +130,7 @@ namespace CrosshairOverlay.Widget
         {
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
+                ClampProfile(profile);
                 _profile = profile;
                 RenderCrosshair();
             });
@@ -128,7 +138,7 @@ namespace CrosshairOverlay.Widget
 
         private void StartSyncTimer()
         {
-            _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(FileSyncIntervalSeconds) };
             _syncTimer.Tick += OnSyncTimerTick;
             _syncTimer.Start();
         }
@@ -144,6 +154,8 @@ namespace CrosshairOverlay.Widget
 
         private void OnSyncTimerTick(object sender, object e)
         {
+            // AppService 活跃时跳过文件轮询，减少不必要的 I/O
+            if (AppServiceClient.Instance.IsConnected) return;
             LoadSettingsFromFile();
         }
 
@@ -160,6 +172,7 @@ namespace CrosshairOverlay.Widget
                 var profile = Newtonsoft.Json.JsonConvert.DeserializeObject<CrosshairProfile>(json);
                 if (profile != null)
                 {
+                    ClampProfile(profile);
                     _profile = profile;
                     RenderCrosshair();
                 }
@@ -176,6 +189,21 @@ namespace CrosshairOverlay.Widget
             {
                 System.Diagnostics.Debug.WriteLine($"[Widget] LoadSettings failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 将 profile 字段限制在合理范围内，防止恶意或损坏的配置导致渲染异常。
+        /// </summary>
+        private static void ClampProfile(CrosshairProfile p)
+        {
+            p.Thickness = Math.Max(1, Math.Min(20, p.Thickness));
+            p.Size = Math.Max(2, Math.Min(200, p.Size));
+            p.Gap = Math.Max(0, Math.Min(100, p.Gap));
+            p.DotSize = Math.Max(1, Math.Min(100, p.DotSize));
+            p.Opacity = Math.Max(0.05, Math.Min(1.0, p.Opacity));
+            p.OutlineThickness = Math.Max(1, Math.Min(10, p.OutlineThickness));
+            if (string.IsNullOrEmpty(p.Color) || p.Color.Length < 7) p.Color = "#00FF00";
+            if (string.IsNullOrEmpty(p.OutlineColor) || p.OutlineColor.Length < 7) p.OutlineColor = "#000000";
         }
 
         private void RenderCrosshair()

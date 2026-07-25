@@ -3,11 +3,33 @@ using SkiaSharp;
 
 namespace CrosshairOverlay.Rendering;
 
+/// <summary>
+/// 使用 SkiaSharp 矢量渲染准心位图。支持 6 种样式、描边、预乘 alpha。
+/// 输出的 SKBitmap 使用 BGRA8888 + Premul，直接兼容 UpdateLayeredWindow。
+/// </summary>
 public class CrosshairRenderer
 {
-    public SKBitmap Render(CrosshairProfile profile)
+    /// <summary>
+    /// 渲染画布尺寸相对于准心 Size 的倍率。
+    /// 3倍确保描边和抗锯齿边缘不会被裁剪。
+    /// </summary>
+    private const int RenderSizeMultiplier = 3;
+
+    /// <summary>
+    /// 渲染准心位图。
+    /// </summary>
+    /// <param name="profile">准心配置。</param>
+    /// <param name="dpiScale">DPI 缩放因子（1.0 = 100%，1.5 = 150%）。用于高 DPI 屏幕下保持准心视觉大小一致。</param>
+    public SKBitmap Render(CrosshairProfile profile, float dpiScale = 1.0f)
     {
-        var renderSize = profile.Size * 3;
+        var scaledSize = (int)(profile.Size * dpiScale);
+        var scaledThickness = profile.Thickness * dpiScale;
+        var scaledGap = (int)(profile.Gap * dpiScale);
+        var scaledDotSize = (int)(profile.DotSize * dpiScale);
+        var scaledOutlineThickness = profile.OutlineThickness * dpiScale;
+
+        var renderSize = (int)(scaledSize * RenderSizeMultiplier);
+        if (renderSize < 4) renderSize = 4;
 
         var bitmap = new SKBitmap(renderSize, renderSize, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
@@ -20,7 +42,7 @@ public class CrosshairRenderer
         using var fillPaint = new SKPaint
         {
             Color = baseColor,
-            StrokeWidth = profile.Thickness,
+            StrokeWidth = scaledThickness,
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             StrokeCap = SKStrokeCap.Round,
@@ -33,27 +55,42 @@ public class CrosshairRenderer
             Style = SKPaintStyle.Fill,
         };
 
+        // 使用缩放后的参数构建临时 profile 供绘制方法使用
+        var scaledProfile = new CrosshairProfile
+        {
+            Style = profile.Style,
+            Color = profile.Color,
+            Thickness = (int)scaledThickness,
+            Size = scaledSize,
+            Gap = scaledGap,
+            DotSize = scaledDotSize,
+            Opacity = profile.Opacity,
+            OutlineEnabled = profile.OutlineEnabled,
+            OutlineColor = profile.OutlineColor,
+            OutlineThickness = (int)scaledOutlineThickness,
+        };
+
         switch (profile.Style)
         {
             case CrosshairStyle.Cross:
-                DrawCross(canvas, center, fillPaint, profile, baseColor, outlineColor);
+                DrawCross(canvas, center, fillPaint, scaledProfile, baseColor, outlineColor);
                 break;
             case CrosshairStyle.Dot:
-                DrawDot(canvas, center, dotPaint, profile, baseColor, outlineColor);
+                DrawDot(canvas, center, dotPaint, scaledProfile, baseColor, outlineColor);
                 break;
             case CrosshairStyle.CrossDot:
-                DrawCross(canvas, center, fillPaint, profile, baseColor, outlineColor);
-                DrawDot(canvas, center, dotPaint, profile, baseColor, outlineColor);
+                DrawCross(canvas, center, fillPaint, scaledProfile, baseColor, outlineColor);
+                DrawDot(canvas, center, dotPaint, scaledProfile, baseColor, outlineColor);
                 break;
             case CrosshairStyle.Circle:
-                DrawCircle(canvas, center, fillPaint, profile, baseColor, outlineColor);
+                DrawCircle(canvas, center, fillPaint, scaledProfile, baseColor, outlineColor);
                 break;
             case CrosshairStyle.CircleDot:
-                DrawCircle(canvas, center, fillPaint, profile, baseColor, outlineColor);
-                DrawDot(canvas, center, dotPaint, profile, baseColor, outlineColor);
+                DrawCircle(canvas, center, fillPaint, scaledProfile, baseColor, outlineColor);
+                DrawDot(canvas, center, dotPaint, scaledProfile, baseColor, outlineColor);
                 break;
             case CrosshairStyle.Outline:
-                DrawOutline(canvas, center, fillPaint, profile, baseColor, outlineColor);
+                DrawOutline(canvas, center, fillPaint, scaledProfile, baseColor, outlineColor);
                 break;
         }
 

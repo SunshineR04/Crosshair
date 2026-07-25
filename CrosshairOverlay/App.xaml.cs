@@ -1,5 +1,4 @@
 ﻿using System.Drawing;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -32,10 +31,15 @@ public partial class App : System.Windows.Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         base.OnStartup(e);
 
+        LogService.Info($"CrosshairOverlay starting (admin={AdminElevationHelper.IsRunningAsAdmin()})");
+
         DispatcherUnhandledException += (s, ex) =>
         {
             if (ex.Exception is COMException comEx && comEx.ErrorCode == unchecked((int)0x80263001))
+            {
+                LogService.Warn("DWM composition not ready (0x80263001), suppressed");
                 ex.Handled = true;
+            }
         };
 
         _settingsService = new SettingsService();
@@ -80,6 +84,7 @@ public partial class App : System.Windows.Application
         viewModel.RestartRequested += OnRestartRequested;
 
         RegisterHotkeys(_hotkeyHwnd);
+        viewModel.HotkeyRegistered = _hotkeyOk;
 
         CreateTrayIcon();
 
@@ -100,7 +105,7 @@ public partial class App : System.Windows.Application
 
     private void OnOverlayError(string msg)
     {
-        LogError($"Overlay error: {msg}");
+        LogService.Error($"Overlay error: {msg}");
         _notifyIcon?.ShowBalloonTip(3000, "Crosshair Error", msg, ToolTipIcon.Error);
     }
 
@@ -113,6 +118,7 @@ public partial class App : System.Windows.Application
         {
             _viewModel?.SaveSettings();
             _overlayHost?.Hide();
+            LogService.Info("Restarting as admin for Real Overlay mode");
             AdminElevationHelper.RestartAsAdmin();
             Current.Shutdown();
         }
@@ -123,14 +129,6 @@ public partial class App : System.Windows.Application
             _notifyIcon?.ShowBalloonTip(3000, "提示",
                 "需要管理员权限才能启用独占全屏模式。请重新勾选并以管理员身份运行。", ToolTipIcon.Info);
         }
-    }
-
-    private void LogError(string message)
-    {
-        var dir = SettingsService.AppDataDir;
-        Directory.CreateDirectory(dir);
-        var log = Path.Combine(dir, "log.txt");
-        File.AppendAllText(log, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERROR {message}{Environment.NewLine}");
     }
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -227,6 +225,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        LogService.Info("CrosshairOverlay shutting down");
         _viewModel?.SaveSettings();
         _viewModel?.Dispose();
 

@@ -68,3 +68,5 @@ BundleArtifacts/
 .idea/
 *.sln.iml
 .codegraph/
+
+.qoder/

@@ -153,4 +153,15 @@ public static class NativeMethods
 
     public const int VK_X = 0x58;
     public const int VK_OEM_3 = 0xC0;
+
+    /// <summary>获取指定窗口的 DPI 值。桌面窗口返回主显示器 DPI。</summary>
+    [DllImport("user32.dll")]
+    public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    /// <summary>获取桌面窗口句柄，用于查询全局 DPI。</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDesktopWindow();
+
+    /// <summary>默认 DPI（96 = 100% 缩放）。</summary>
+    public const uint DefaultDpi = 96;
 }

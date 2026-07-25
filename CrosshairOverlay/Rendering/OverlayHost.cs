@@ -1,13 +1,19 @@
 using System.Runtime.InteropServices;
 using CrosshairOverlay.Helpers;
 using CrosshairOverlay.Models;
+using CrosshairOverlay.Services;
 using SkiaSharp;
 using Timer = System.Timers.Timer;
 
 namespace CrosshairOverlay.Rendering;
 
-public class OverlayHost : IDisposable
+public class OverlayHost : IOverlayHost
 {
+    /// <summary>
+    /// ForceTopmost 模式下保持窗口置顶的定时器间隔（毫秒）。
+    /// 500ms 在性能开销和抢占恢复速度之间取得平衡。
+    /// </summary>
+    private const int KeepTopmostIntervalMs = 500;
     private IntPtr _hwnd;
     private readonly CrosshairRenderer _renderer;
     private CrosshairProfile _profile;
@@ -20,6 +26,7 @@ public class OverlayHost : IDisposable
     private IntPtr _memDc;
     private readonly bool _forceTopmost;
     private Timer? _keepTopmostTimer;
+    private float _dpiScale = 1.0f;
 
     private const string WindowClassName = "CrosshairOverlayWindow";
 
@@ -96,13 +103,22 @@ public class OverlayHost : IDisposable
     {
         if (_visible) return true;
 
-        var screen = Screen.PrimaryScreen ?? Screen.AllScreens.FirstOrDefault();
+        // 优先使用鼠标所在屏幕（通常是游戏屏幕），回退到主屏幕
+        var cursorPos = System.Windows.Forms.Cursor.Position;
+        var screen = Screen.AllScreens.FirstOrDefault(s => s.Bounds.Contains(cursorPos))
+                     ?? Screen.PrimaryScreen
+                     ?? Screen.AllScreens.FirstOrDefault();
         if (screen == null) return false;
 
         _screenX = screen.Bounds.X;
         _screenY = screen.Bounds.Y;
         _screenWidth = screen.Bounds.Width;
         _screenHeight = screen.Bounds.Height;
+
+        // 获取主显示器 DPI 缩放因子，确保准心在高 DPI 屏幕上保持正确的视觉大小
+        var desktopHwnd = NativeMethods.GetDesktopWindow();
+        var dpi = NativeMethods.GetDpiForWindow(desktopHwnd);
+        _dpiScale = dpi > 0 ? dpi / (float)NativeMethods.DefaultDpi : 1.0f;
 
         var exStyle = NativeMethods.WS_EX_LAYERED
                       | NativeMethods.WS_EX_TRANSPARENT
@@ -123,7 +139,7 @@ public class OverlayHost : IDisposable
         if (_hwnd == IntPtr.Zero)
         {
             var err = Marshal.GetLastWin32Error();
-            System.Diagnostics.Debug.WriteLine($"[CrosshairOverlay] CreateWindowEx failed: {err}");
+            LogService.Error($"CreateWindowEx failed: {err}");
             return false;
         }
 
@@ -144,7 +160,7 @@ public class OverlayHost : IDisposable
 
     private void StartKeepTopmostTimer()
     {
-        _keepTopmostTimer = new Timer(500);
+        _keepTopmostTimer = new Timer(KeepTopmostIntervalMs);
         _keepTopmostTimer.Elapsed += (_, _) =>
         {
             if (_hwnd != IntPtr.Zero)
@@ -193,79 +209,91 @@ public class OverlayHost : IDisposable
 
         CleanupGdi();
 
-        using var bitmap = _renderer.Render(_profile);
-
-        var screenDc = NativeMethods.GetDC(IntPtr.Zero);
-        if (screenDc == IntPtr.Zero)
+        SKBitmap bitmap;
+        try
         {
-            System.Diagnostics.Debug.WriteLine("[OverlayHost] GetDC failed");
+            bitmap = _renderer.Render(_profile, _dpiScale);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"Crosshair render failed: {ex.Message}");
             return;
         }
 
-        _memDc = NativeMethods.CreateCompatibleDC(screenDc);
-        if (_memDc == IntPtr.Zero)
+        using (bitmap)
         {
-            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-            System.Diagnostics.Debug.WriteLine("[OverlayHost] CreateCompatibleDC failed");
-            return;
-        }
-
-        var bmi = new NativeMethods.BITMAPINFO
-        {
-            bmiHeader = new NativeMethods.BITMAPINFOHEADER
+            var screenDc = NativeMethods.GetDC(IntPtr.Zero);
+            if (screenDc == IntPtr.Zero)
             {
-                biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
-                biWidth = bitmap.Width,
-                biHeight = -bitmap.Height,
-                biPlanes = 1,
-                biBitCount = 32,
-                biCompression = 0
+                LogService.Error("GetDC failed");
+                return;
             }
-        };
 
-        IntPtr bits;
-        _hBitmap = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
+            _memDc = NativeMethods.CreateCompatibleDC(screenDc);
+            if (_memDc == IntPtr.Zero)
+            {
+                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+                LogService.Error("CreateCompatibleDC failed");
+                return;
+            }
 
-        if (_hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
-        {
-            NativeMethods.DeleteDC(_memDc);
-            _memDc = IntPtr.Zero;
+            var bmi = new NativeMethods.BITMAPINFO
+            {
+                bmiHeader = new NativeMethods.BITMAPINFOHEADER
+                {
+                    biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
+                    biWidth = bitmap.Width,
+                    biHeight = -bitmap.Height,
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = 0
+                }
+            };
+
+            IntPtr bits;
+            _hBitmap = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
+
+            if (_hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
+            {
+                NativeMethods.DeleteDC(_memDc);
+                _memDc = IntPtr.Zero;
+                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+                LogService.Error($"CreateDIBSection failed: {Marshal.GetLastWin32Error()}");
+                return;
+            }
+
+            Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
+
+            NativeMethods.SelectObject(_memDc, _hBitmap);
             NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-            System.Diagnostics.Debug.WriteLine($"[OverlayHost] CreateDIBSection failed: {Marshal.GetLastWin32Error()}");
-            return;
-        }
 
-        Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
+            var blend = new NativeMethods.BLENDFUNCTION
+            {
+                BlendOp = NativeMethods.AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 255,
+                AlphaFormat = NativeMethods.AC_SRC_ALPHA
+            };
 
-        NativeMethods.SelectObject(_memDc, _hBitmap);
-        NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+            var pptDst = new NativeMethods.POINT
+            {
+                x = _screenX + (_screenWidth - bitmap.Width) / 2,
+                y = _screenY + (_screenHeight - bitmap.Height) / 2
+            };
 
-        var blend = new NativeMethods.BLENDFUNCTION
-        {
-            BlendOp = NativeMethods.AC_SRC_OVER,
-            BlendFlags = 0,
-            SourceConstantAlpha = 255,
-            AlphaFormat = NativeMethods.AC_SRC_ALPHA
-        };
+            var psize = new NativeMethods.SIZE
+            {
+                cx = bitmap.Width,
+                cy = bitmap.Height
+            };
 
-        var pptDst = new NativeMethods.POINT
-        {
-            x = _screenX + (_screenWidth - bitmap.Width) / 2,
-            y = _screenY + (_screenHeight - bitmap.Height) / 2
-        };
+            var pptSrc = new NativeMethods.POINT { x = 0, y = 0 };
 
-        var psize = new NativeMethods.SIZE
-        {
-            cx = bitmap.Width,
-            cy = bitmap.Height
-        };
-
-        var pptSrc = new NativeMethods.POINT { x = 0, y = 0 };
-
-        if (!NativeMethods.UpdateLayeredWindow(
-            _hwnd, IntPtr.Zero, ref pptDst, ref psize, _memDc, ref pptSrc, 0, ref blend, NativeMethods.ULW_ALPHA))
-        {
-            System.Diagnostics.Debug.WriteLine($"[OverlayHost] UpdateLayeredWindow failed: {Marshal.GetLastWin32Error()}");
+            if (!NativeMethods.UpdateLayeredWindow(
+                _hwnd, IntPtr.Zero, ref pptDst, ref psize, _memDc, ref pptSrc, 0, ref blend, NativeMethods.ULW_ALPHA))
+            {
+                LogService.Error($"UpdateLayeredWindow failed: {Marshal.GetLastWin32Error()}");
+            }
         }
     }
 

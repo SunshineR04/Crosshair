@@ -8,6 +8,14 @@ namespace CrosshairOverlay.Services;
 
 public class AppServiceServer : IDisposable
 {
+    /// <summary>AppService 服务名称，必须与 Widget 端一致。</summary>
+    public const string ServiceName = "CrosshairProfileService";
+    /// <summary>消息中的命令字段名。</summary>
+    private const string KeyCommand = "command";
+    /// <summary>更新配置命令名。</summary>
+    private const string CmdUpdateProfile = "UpdateProfile";
+    /// <summary>消息中的 profile JSON 字段名。</summary>
+    private const string KeyProfileJson = "profileJson";
     private AppServiceConnection? _connection;
     private CrosshairProfile? _pendingProfile;
 
@@ -26,14 +34,14 @@ public class AppServiceServer : IDisposable
 
             _connection = new AppServiceConnection
             {
-                AppServiceName = "CrosshairProfileService",
+                AppServiceName = ServiceName,
                 PackageFamilyName = pkg.Id.FamilyName
             };
 
             var status = await _connection.OpenAsync();
             if (status != AppServiceConnectionStatus.Success)
             {
-                System.Diagnostics.Debug.WriteLine($"[AppService] Connection failed: {status}");
+                LogService.Warn($"AppService connection failed: {status}");
                 _connection.Dispose();
                 _connection = null;
                 return;
@@ -47,7 +55,8 @@ public class AppServiceServer : IDisposable
         }
         catch (System.Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppService] Initialize failed: {ex.Message}");
+            // 独立 exe 模式下 Package.Current 不可用，这是预期行为（文件同步作为 fallback）
+            LogService.Warn($"AppService unavailable (standalone mode): {ex.Message}");
             _connection = null;
         }
     }
@@ -65,14 +74,14 @@ public class AppServiceServer : IDisposable
             var json = JsonSerializer.Serialize(profile, JsonOptions);
             var msg = new ValueSet
             {
-                { "command", "UpdateProfile" },
-                { "profileJson", json }
+                { KeyCommand, CmdUpdateProfile },
+                { KeyProfileJson, json }
             };
             await _connection.SendMessageAsync(msg);
         }
         catch (System.Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppService] PushProfile failed: {ex.Message}");
+            LogService.Error("AppService PushProfile failed", ex);
         }
     }
 
