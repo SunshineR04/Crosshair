@@ -60,6 +60,7 @@ BundleArtifacts/
 
 ## Logs
 *.log
+**/TestResults/
 
 ## macOS
 .DS_Store
@@ -70,3 +71,9 @@ BundleArtifacts/
 .codegraph/
 
 .qoder/
+
+## Installer entrypoints are source-controlled; generated Release payloads remain ignored.
+!Release/
+Release/*
+!Release/setup.bat
+!Release/setup.ps1

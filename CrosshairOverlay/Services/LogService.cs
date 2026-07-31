@@ -22,7 +22,7 @@ public static class LogService
     public static void Error(string message) => Write("ERROR", message);
 
     /// <summary>记录错误级别日志（含异常详情）。</summary>
-    public static void Error(string message, Exception ex) => Write("ERROR", $"{message}: {ex.Message}");
+    public static void Error(string message, Exception ex) => Write("ERROR", $"{message}: {ex}");
 
     private static void Write(string level, string message)
     {

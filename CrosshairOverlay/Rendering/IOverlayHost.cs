@@ -19,6 +19,11 @@ public interface IOverlayHost : IDisposable
     void SetProfile(CrosshairProfile profile);
 
     /// <summary>
+    /// Updates the mode that keeps the overlay above competing fullscreen windows.
+    /// </summary>
+    void SetForceTopmost(bool forceTopmost);
+
+    /// <summary>
     /// 创建并显示叠加窗口。
     /// </summary>
     /// <returns>成功返回 true；CreateWindowEx 失败返回 false。</returns>

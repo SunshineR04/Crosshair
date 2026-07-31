@@ -16,8 +16,11 @@ public static class NativeMethods
     public const int SW_SHOWNOACTIVATE = 4;
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
 
     public const int WM_HOTKEY = 0x0312;
+    public const uint WM_NCHITTEST = 0x0084;
+    public const int HTTRANSPARENT = -1;
 
     public const uint MOD_ALT = 0x0001;
     public const uint MOD_NOREPEAT = 0x4000;

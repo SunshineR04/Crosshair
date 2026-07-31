@@ -65,14 +65,14 @@ WPF 项目使用 `net8.0-windows10.0.19041.0` — WinRT API (`AppServiceConnecti
 **通道 1：AppService IPC**（仅 MSIX 包内运行时可用）
 - `AppServiceServer.cs` 连接 `CrosshairProfileService`，推送 profile JSON
 - `AppServiceClient.cs`（Widget）通过 `OnBackgroundActivated` 接收
-- `_pendingProfile` 暂存机制：连接建立前的推送不丢弃，连接成功后自动 flush
+- `_latestProfile` 快照机制：连接建立前、发送失败或断线时保留最新配置，连接恢复后自动 flush
 
 **通道 2：文件同步**（独立 exe 的 fallback）
 - 桌面端 `SettingsService.SaveForWidget()` 写入 `widget_settings.json`
 - Widget 每 2 秒通过 `DispatcherTimer` 轮询读取
 - `IsVisible` setter 立即写入文件，确保 Alt+X 切换实时同步
 
-两个通道并行运行，AppService 可用时即时推送，文件同步作为兜底。
+两个通道并行运行，AppService 可用时即时推送，文件同步持续作为可靠回退通道。当前 Release zip 使用独立 WPF + 独立 Widget MSIX，桌面端不在 MSIX 内运行时 AppService 会自动禁用。
 
 ### Widget 准心自动居中
 
@@ -129,7 +129,7 @@ CrosshairOverlay_v1.1.0_Setup.zip
 ├── CrosshairOverlay/        ← 自包含发布（约 198 MB）
 ├── CrosshairOverlayWidget.msix
 ├── CrosshairOverlayWidget.cer
-└── setup.bat                ← 双击安装（安装证书 + Widget + 启动桌面端）
+└── setup.bat                ← 双击安装（调用 setup.ps1，安装证书 + Widget + 启动桌面端）
 ```
 
 发布到 GitHub Releases 和 Gitee Releases（Gitee 不支持 API 上传附件，需手动在网页端上传或引导用户从 GitHub 下载）。

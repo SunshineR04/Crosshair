@@ -49,6 +49,8 @@
 
 > ⚠️ **重要**：固定后必须启用点击穿透，否则 Widget 窗口会拦截鼠标操作，导致桌面对应区域无法点击。启用后所有鼠标事件将穿透 Widget 直达底层游戏/桌面。
 
+> 当前发布包由独立 WPF 桌面端和独立 Widget MSIX 组成，文件同步是跨进程配置同步的可靠回退通道。组合 MSIX 额外启用 AppService 即时同步，但文件通道仍会保留。
+
 ---
 
 ## 下载
@@ -135,6 +137,9 @@ CrosshairOverlay/
 ```powershell
 # 桌面应用
 dotnet build CrosshairOverlay
+
+# 测试
+dotnet test CrosshairOverlay.Tests
 
 # Game Bar Widget（需要 VS 2019+ + UWP 工作负荷）
 & "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe" CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64

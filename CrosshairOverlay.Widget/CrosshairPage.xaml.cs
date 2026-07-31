@@ -27,6 +27,7 @@ namespace CrosshairOverlay.Widget
         private string _lastJson = string.Empty;
         private bool _rendered;
         private int _retryCount;
+        private bool _profileSubscribed;
         private XboxGameBarWidget _widget;
         private double _rawPixelsPerViewPixel = 1.0;
         private double _screenCenterRawX;
@@ -38,12 +39,15 @@ namespace CrosshairOverlay.Widget
             Loaded += OnPageLoaded;
             Unloaded += OnPageUnloaded;
             SizeChanged += OnSizeChanged;
-            AppServiceClient.Instance.ProfileUpdated += OnProfileUpdated;
         }
 
         private void OnPageUnloaded(object sender, RoutedEventArgs e)
         {
-            AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
+            if (_profileSubscribed)
+            {
+                AppServiceClient.Instance.ProfileUpdated -= OnProfileUpdated;
+                _profileSubscribed = false;
+            }
             if (_widget != null)
             {
                 _widget.WindowBoundsChanged -= OnWindowBoundsChanged;
@@ -58,6 +62,15 @@ namespace CrosshairOverlay.Widget
 
         private void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+            if (!_profileSubscribed)
+            {
+                AppServiceClient.Instance.ProfileUpdated += OnProfileUpdated;
+                _profileSubscribed = true;
+            }
+
+            if (AppServiceClient.Instance.HasCurrentProfile)
+                _profile = CrosshairProfileRules.Sanitize(AppServiceClient.Instance.CurrentProfile);
+
             try
             {
                 var di = DisplayInformation.GetForCurrentView();
@@ -70,6 +83,8 @@ namespace CrosshairOverlay.Widget
                 System.Diagnostics.Debug.WriteLine($"[Widget] DisplayInformation init failed: {ex.Message}");
             }
             StartSyncTimer();
+            if (!AppServiceClient.Instance.IsConnected || !AppServiceClient.Instance.HasCurrentProfile)
+                LoadSettingsFromFile();
             TryRenderOrRetry();
         }
 
@@ -109,7 +124,7 @@ namespace CrosshairOverlay.Widget
             {
                 _widget = widget;
                 _widget.WindowBoundsChanged += OnWindowBoundsChanged;
-                _widget.CenterWindowAsync();  // fire-and-forget: centering is best-effort
+                _ = _widget.CenterWindowAsync();  // fire-and-forget: centering is best-effort
             }
             if (_renderRetryTimer != null)
             {
@@ -130,14 +145,14 @@ namespace CrosshairOverlay.Widget
         {
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
-                ClampProfile(profile);
-                _profile = profile;
+                _profile = CrosshairProfileRules.Sanitize(profile);
                 RenderCrosshair();
             });
         }
 
         private void StartSyncTimer()
         {
+            StopSyncTimer();
             _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(FileSyncIntervalSeconds) };
             _syncTimer.Tick += OnSyncTimerTick;
             _syncTimer.Start();
@@ -154,8 +169,7 @@ namespace CrosshairOverlay.Widget
 
         private void OnSyncTimerTick(object sender, object e)
         {
-            // AppService 活跃时跳过文件轮询，减少不必要的 I/O
-            if (AppServiceClient.Instance.IsConnected) return;
+            if (AppServiceClient.Instance.IsConnected && AppServiceClient.Instance.HasCurrentProfile) return;
             LoadSettingsFromFile();
         }
 
@@ -172,8 +186,7 @@ namespace CrosshairOverlay.Widget
                 var profile = Newtonsoft.Json.JsonConvert.DeserializeObject<CrosshairProfile>(json);
                 if (profile != null)
                 {
-                    ClampProfile(profile);
-                    _profile = profile;
+                    _profile = CrosshairProfileRules.Sanitize(profile);
                     RenderCrosshair();
                 }
                 else
@@ -194,23 +207,17 @@ namespace CrosshairOverlay.Widget
         /// <summary>
         /// 将 profile 字段限制在合理范围内，防止恶意或损坏的配置导致渲染异常。
         /// </summary>
-        private static void ClampProfile(CrosshairProfile p)
-        {
-            p.Thickness = Math.Max(1, Math.Min(20, p.Thickness));
-            p.Size = Math.Max(2, Math.Min(200, p.Size));
-            p.Gap = Math.Max(0, Math.Min(100, p.Gap));
-            p.DotSize = Math.Max(1, Math.Min(100, p.DotSize));
-            p.Opacity = Math.Max(0.05, Math.Min(1.0, p.Opacity));
-            p.OutlineThickness = Math.Max(1, Math.Min(10, p.OutlineThickness));
-            if (string.IsNullOrEmpty(p.Color) || p.Color.Length < 7) p.Color = "#00FF00";
-            if (string.IsNullOrEmpty(p.OutlineColor) || p.OutlineColor.Length < 7) p.OutlineColor = "#000000";
-        }
-
         private void RenderCrosshair()
         {
             CrosshairCanvas.Children.Clear();
 
-            if (!_profile.IsVisible) return;
+            if (!_profile.IsVisible)
+            {
+                _rendered = true;
+                return;
+            }
+
+            _rendered = false;
 
             double cx = ActualWidth / 2.0;
             double cy = ActualHeight / 2.0;
@@ -245,7 +252,10 @@ namespace CrosshairOverlay.Widget
                 case CrosshairStyle.Circle: DrawCircle(cx, cy, baseColor, outlineColor); break;
                 case CrosshairStyle.CircleDot: DrawCircle(cx, cy, baseColor, outlineColor); DrawDot(cx, cy, baseColor, outlineColor); break;
                 case CrosshairStyle.Outline: DrawOutline(cx, cy, baseColor, outlineColor); break;
+                default: return;
             }
+
+            _rendered = true;
         }
 
         private void DrawCross(double cx, double cy, Color baseColor, Color outlineColor)
@@ -346,18 +356,27 @@ namespace CrosshairOverlay.Widget
 
         private static Color ParseColor(string hex, double opacity)
         {
+            var safeOpacity = double.IsNaN(opacity) || double.IsInfinity(opacity)
+                ? 1.0
+                : Math.Max(0, Math.Min(1, opacity));
+            var alpha = (byte)(safeOpacity * 255);
+
             try
             {
-                if (string.IsNullOrEmpty(hex) || hex.Length < 7) return Colors.Lime;
+                if (string.IsNullOrEmpty(hex) || hex.Length < 7)
+                    return Color.FromArgb(alpha, Colors.Lime.R, Colors.Lime.G, Colors.Lime.B);
                 if (hex.StartsWith("#")) hex = hex.Substring(1);
-                if (hex.Length < 6) return Colors.Lime;
+                if (hex.Length < 6)
+                    return Color.FromArgb(alpha, Colors.Lime.R, Colors.Lime.G, Colors.Lime.B);
                 byte r = Convert.ToByte(hex.Substring(0, 2), 16);
                 byte g = Convert.ToByte(hex.Substring(2, 2), 16);
                 byte b = Convert.ToByte(hex.Substring(4, 2), 16);
-                byte a = (byte)(Math.Max(0, Math.Min(1, opacity)) * 255);
-                return Color.FromArgb(a, r, g, b);
+                return Color.FromArgb(alpha, r, g, b);
             }
-            catch { return Colors.Lime; }
+            catch
+            {
+                return Color.FromArgb(alpha, Colors.Lime.R, Colors.Lime.G, Colors.Lime.B);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel.AppService;
@@ -49,9 +50,15 @@ namespace CrosshairOverlay.Widget
                 && details.CallerPackageFamilyName == Package.Current.Id.FamilyName)
             {
                 var deferral = args.TaskInstance.GetDeferral();
-                args.TaskInstance.Canceled += (s, e) => deferral.Complete();
+                var deferralCompleted = 0;
+                Action completeDeferral = () =>
+                {
+                    if (Interlocked.Exchange(ref deferralCompleted, 1) == 0)
+                        deferral.Complete();
+                };
+                args.TaskInstance.Canceled += (s, e) => completeDeferral();
 
-                AppServiceClient.Instance.Initialize(details.AppServiceConnection, deferral);
+                AppServiceClient.Instance.Initialize(details.AppServiceConnection, completeDeferral);
             }
         }
 

@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Threading;
 using CrosshairOverlay.Models;
 using CrosshairOverlay.Rendering;
 using CrosshairOverlay.Services;
 
 namespace CrosshairOverlay.ViewModels;
 
-public class MainViewModel : INotifyPropertyChanged
+public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     /// <summary>
     /// 设置保存防抖间隔（毫秒）。滑块拖动期间避免每次变更都写磁盘。
@@ -18,7 +19,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly AppServiceServer? _appServiceServer;
 
     private CrosshairProfile _profile;
-    private readonly System.Timers.Timer _saveDebounceTimer;
+    private readonly DispatcherTimer _saveDebounceTimer;
     private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -83,9 +84,16 @@ public class MainViewModel : INotifyPropertyChanged
         get => _startupEnabled;
         set
         {
+            if (_startupEnabled == value) return;
+
             _startupEnabled = value;
             OnPropertyChanged();
-            StartupService.IsEnabled = value;
+            if (!StartupService.TrySetEnabled(value, out var error))
+            {
+                _startupEnabled = StartupService.IsEnabled;
+                OnPropertyChanged();
+                OverlayError?.Invoke($"开机自启设置失败: {error}");
+            }
         }
     }
 
@@ -231,6 +239,8 @@ public class MainViewModel : INotifyPropertyChanged
         get => _useExclusiveFullscreen;
         set
         {
+            if (_useExclusiveFullscreen == value) return;
+
             _useExclusiveFullscreen = value;
             OnPropertyChanged();
             Profile.ExclusiveFullscreenMode = value;
@@ -238,7 +248,11 @@ public class MainViewModel : INotifyPropertyChanged
             if (value && !AdminElevationHelper.IsRunningAsAdmin())
             {
                 RestartRequested?.Invoke();
+                return;
             }
+
+            _overlayHost.SetForceTopmost(value);
+            ApplyProfile();
         }
     }
 
@@ -261,6 +275,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _useExclusiveFullscreen = false;
         Profile.ExclusiveFullscreenMode = false;
+        _overlayHost.SetForceTopmost(false);
         OnPropertyChanged(nameof(UseExclusiveFullscreen));
     }
 
@@ -293,15 +308,27 @@ public class MainViewModel : INotifyPropertyChanged
         MinimizeCommand = new RelayCommand(() => CloseRequested?.Invoke());
         ExitCommand = new RelayCommand(() => System.Windows.Application.Current.Shutdown());
 
-        _saveDebounceTimer = new System.Timers.Timer(SaveDebounceIntervalMs) { AutoReset = false };
-        _saveDebounceTimer.Elapsed += (_, _) =>
-            System.Windows.Application.Current.Dispatcher.Invoke(() => SaveSettings());
+        _saveDebounceTimer = new DispatcherTimer(
+            DispatcherPriority.Background,
+            System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(SaveDebounceIntervalMs)
+        };
+        _saveDebounceTimer.Tick += OnSaveDebounceTick;
+    }
+
+    private void OnSaveDebounceTick(object? sender, EventArgs e)
+    {
+        _saveDebounceTimer.Stop();
+        SaveSettings();
     }
 
     public void SaveSettings()
     {
-        if (!_disposed)
-            _saveDebounceTimer.Stop();
+        if (_disposed) return;
+
+        _saveDebounceTimer.Stop();
+        _profile = CrosshairProfileRules.Sanitize(_profile);
         _profile.IsVisible = _isVisible;
         _settingsService.Save(_profile);
         _settingsService.SaveForWidget(_profile);
@@ -325,7 +352,7 @@ public class MainViewModel : INotifyPropertyChanged
         if (_disposed) return;
         _disposed = true;
         _saveDebounceTimer.Stop();
-        _saveDebounceTimer.Dispose();
+        _saveDebounceTimer.Tick -= OnSaveDebounceTick;
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

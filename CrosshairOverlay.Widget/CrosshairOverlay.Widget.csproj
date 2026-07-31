@@ -57,6 +57,7 @@
       <DependentUpon>CrosshairPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Models\CrosshairProfile.cs" />
+    <Compile Include="..\CrosshairOverlay\Models\CrosshairProfileRules.cs" Link="Models\CrosshairProfileRules.cs" />
     <Compile Include="Services\AppServiceClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

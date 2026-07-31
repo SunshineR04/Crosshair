@@ -20,7 +20,9 @@ public partial class App : System.Windows.Application
     private MainViewModel? _viewModel;
     private SettingsService? _settingsService;
     private AppServiceServer? _appServiceServer;
+    private SingleInstanceGuard? _singleInstanceGuard;
     private ToolStripMenuItem? _toggleMenuItem;
+    private bool _showSettingsRequested;
 
     private int _toggleHotkeyId;
     private int _settingsHotkeyId;
@@ -30,6 +32,15 @@ public partial class App : System.Windows.Application
     {
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         base.OnStartup(e);
+
+        _singleInstanceGuard = SingleInstanceGuard.TryCreate();
+        if (_singleInstanceGuard == null)
+        {
+            Current.Shutdown();
+            return;
+        }
+
+        _singleInstanceGuard.ShowSettingsRequested += OnShowSettingsRequested;
 
         LogService.Info($"CrosshairOverlay starting (admin={AdminElevationHelper.IsRunningAsAdmin()})");
 
@@ -56,7 +67,7 @@ public partial class App : System.Windows.Application
         var overlayHost = new OverlayHost(renderer, profile, useForceTopmost);
 
         _appServiceServer = new AppServiceServer();
-        _ = _appServiceServer.InitializeAsync();
+        _ = _appServiceServer.InitializeAsync(profile);
 
         var hotkeyWindow = new Window
         {
@@ -96,6 +107,12 @@ public partial class App : System.Windows.Application
         _mainWindow.Show();
         _mainWindow.Activate();
 
+        if (_showSettingsRequested)
+        {
+            _showSettingsRequested = false;
+            _mainWindow.Activate();
+        }
+
         if (!_hotkeyOk)
         {
             _notifyIcon?.ShowBalloonTip(3000, "Crosshair Overlay",
@@ -109,6 +126,21 @@ public partial class App : System.Windows.Application
         _notifyIcon?.ShowBalloonTip(3000, "Crosshair Error", msg, ToolTipIcon.Error);
     }
 
+    private void OnShowSettingsRequested()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_mainWindow == null)
+            {
+                _showSettingsRequested = true;
+                return;
+            }
+
+            _mainWindow.Show();
+            _mainWindow.Activate();
+        }));
+    }
+
     private void OnRestartRequested()
     {
         NativeMethods.UnregisterHotKey(_hotkeyHwnd, _toggleHotkeyId);
@@ -118,6 +150,8 @@ public partial class App : System.Windows.Application
         {
             _viewModel?.SaveSettings();
             _overlayHost?.Hide();
+            _singleInstanceGuard?.Dispose();
+            _singleInstanceGuard = null;
             LogService.Info("Restarting as admin for Real Overlay mode");
             AdminElevationHelper.RestartAsAdmin();
             Current.Shutdown();
@@ -126,6 +160,10 @@ public partial class App : System.Windows.Application
         {
             RegisterHotkeys(_hotkeyHwnd);
             _viewModel?.ResetExclusiveFullscreen();
+            _singleInstanceGuard = SingleInstanceGuard.TryCreate();
+            if (_singleInstanceGuard != null)
+                _singleInstanceGuard.ShowSettingsRequested += OnShowSettingsRequested;
+            _viewModel?.SaveSettings();
             _notifyIcon?.ShowBalloonTip(3000, "提示",
                 "需要管理员权限才能启用独占全屏模式。请重新勾选并以管理员身份运行。", ToolTipIcon.Info);
         }
@@ -157,19 +195,29 @@ public partial class App : System.Windows.Application
         _toggleHotkeyId = 1;
         _settingsHotkeyId = 2;
 
-        _hotkeyOk = true;
+        var modifiers = NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT;
+        var toggleRegistered = RegisterHotkeyWithRetry(
+            hwnd, _toggleHotkeyId, modifiers, NativeMethods.VK_X, "Alt+X");
+        var settingsRegistered = RegisterHotkeyWithRetry(
+            hwnd, _settingsHotkeyId, modifiers, NativeMethods.VK_OEM_3, "Alt+`");
 
-        if (!NativeMethods.RegisterHotKey(hwnd, _toggleHotkeyId,
-                NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT, NativeMethods.VK_X))
+        _hotkeyOk = toggleRegistered && settingsRegistered;
+    }
+
+    private static bool RegisterHotkeyWithRetry(IntPtr hwnd, int id, uint modifiers, uint key, string name)
+    {
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            _hotkeyOk = false;
+            if (NativeMethods.RegisterHotKey(hwnd, id, modifiers, key))
+                return true;
+
+            if (attempt < maxAttempts)
+                System.Threading.Thread.Sleep(100);
         }
 
-        if (!NativeMethods.RegisterHotKey(hwnd, _settingsHotkeyId,
-                NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT, NativeMethods.VK_OEM_3))
-        {
-            _hotkeyOk = false;
-        }
+        LogService.Warn($"Hotkey registration failed for {name}: {Marshal.GetLastWin32Error()}");
+        return false;
     }
 
     private void CreateTrayIcon()
@@ -237,6 +285,8 @@ public partial class App : System.Windows.Application
 
         _overlayHost?.Dispose();
         _appServiceServer?.Dispose();
+        _singleInstanceGuard?.Dispose();
+        _singleInstanceGuard = null;
 
         if (_notifyIcon != null)
         {

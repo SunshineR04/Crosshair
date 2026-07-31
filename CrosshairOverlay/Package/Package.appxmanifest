@@ -8,9 +8,10 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap3 mp desktop rescap">
 
-  <Identity Name="CrosshairOverlay"
-            Publisher="CN=CrosshairOverlay"
-            Version="1.0.0.0" />
+  <Identity Name="CrosshairOverlayWidget"
+             Publisher="CN=CrosshairOverlay"
+             Version="1.0.0.0"
+             ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>Crosshair Overlay</DisplayName>
@@ -22,16 +23,19 @@
     <TargetDeviceFamily Name="Windows.Universal"
                         MinVersion="10.0.19041.0"
                         MaxVersionTested="10.0.22621.0" />
+    <PackageDependency Name="Microsoft.NET.Native.Framework.2.2" MinVersion="2.2.29512.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.NET.Native.Runtime.2.2" MinVersion="2.2.28604.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00" MinVersion="14.0.30035.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
   </Dependencies>
 
   <Resources>
-    <Resource Language="x-generate" />
+    <Resource Language="zh-CN" />
   </Resources>
 
   <Applications>
 
     <!-- ===== WPF Desktop App (fullTrust) ===== -->
-    <Application Id="DesktopApp"
+    <Application Id="Desktop"
                  Executable="DesktopApp\CrosshairOverlay.exe"
                  EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
@@ -49,7 +53,7 @@
     </Application>
 
     <!-- ===== UWP Game Bar Widget ===== -->
-    <Application Id="WidgetApp"
+    <Application Id="App"
                  Executable="CrosshairOverlay.Widget.exe"
                  EntryPoint="CrosshairOverlay.Widget.App">
       <uap:VisualElements
@@ -94,20 +98,19 @@
   </Applications>
 
   <Extensions>
-    <Extension Category="windows.activatableClass.proxyStub">
-      <ProxyStub ClassId="00000355-0000-0000-C000-000000000046">
-        <Path>Microsoft.Gaming.XboxGameBar.winmd</Path>
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetAuthHost" InterfaceId="DC263529-B12F-469E-BB35-B94069F5B15A" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetControlHost" InterfaceId="C309CAC7-8435-4082-8F37-784523747047" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetForegroundWorkerHost" InterfaceId="DDB52B57-FA83-420C-AFDE-6FA556E18B83" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost" InterfaceId="5D12BC93-212B-4B9F-9091-76B73BF56525" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost2" InterfaceId="28717C8B-D8E8-47A8-AF47-A1D5263BAE9B" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost3" InterfaceId="3F5A3F12-C1E4-4942-B80D-3117BC948E29" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate" InterfaceId="22ABA97F-FB0F-4439-9BDD-2C67B2D5AA8F" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate2" InterfaceId="B2F7DB8C-7540-48DA-9B46-4E60CE0D9DEB" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate3" InterfaceId="4FB89FB6-7CB8-489D-8408-2269E6C733A1" />
-        <Interface Name="Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate4" InterfaceId="5638D65A-3733-48CC-90E5-984688D62786" />
-      </ProxyStub>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Microsoft.Gaming.XboxGameBar.dll</Path>
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.Authentication.XboxGameBarWebAuthenticationBroker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarForegroundWorker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationManager" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidget" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.Input.XboxGameBarHotkeyWatcher" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationBuilder" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetActivity" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarAppTargetTracker" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetControl" ThreadingModel="both" />
+      </InProcessServer>
     </Extension>
   </Extensions>
 

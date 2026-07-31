@@ -24,7 +24,8 @@ public class OverlayHost : IOverlayHost
     private int _screenHeight;
     private IntPtr _hBitmap;
     private IntPtr _memDc;
-    private readonly bool _forceTopmost;
+    private IntPtr _previousBitmap;
+    private bool _forceTopmost;
     private Timer? _keepTopmostTimer;
     private float _dpiScale = 1.0f;
 
@@ -33,7 +34,7 @@ public class OverlayHost : IOverlayHost
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    private static readonly WndProcDelegate _defWndProcDelegate = DefWindowProc;
+    private static readonly WndProcDelegate _windowProcDelegate = OverlayWndProc;
 
     public bool IsVisible => _visible;
     public IntPtr Handle => _hwnd;
@@ -41,7 +42,7 @@ public class OverlayHost : IOverlayHost
     public OverlayHost(CrosshairRenderer renderer, CrosshairProfile profile, bool forceTopmost = false)
     {
         _renderer = renderer;
-        _profile = profile;
+        _profile = CrosshairProfileRules.Sanitize(profile);
         _forceTopmost = forceTopmost;
         RegisterWindowClass();
     }
@@ -52,7 +53,7 @@ public class OverlayHost : IOverlayHost
         {
             cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
             style = 0,
-            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_defWndProcDelegate),
+            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_windowProcDelegate),
             hInstance = NativeMethods.GetModuleHandle(null),
             hIcon = IntPtr.Zero,
             hCursor = IntPtr.Zero,
@@ -71,6 +72,14 @@ public class OverlayHost : IOverlayHost
 
     [DllImport("user32.dll")]
     private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private static IntPtr OverlayWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (msg == NativeMethods.WM_NCHITTEST)
+            return new IntPtr(NativeMethods.HTTRANSPARENT);
+
+        return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern ushort RegisterClassEx(ref WNDCLASSEX lpwcx);
@@ -94,9 +103,28 @@ public class OverlayHost : IOverlayHost
 
     public void SetProfile(CrosshairProfile profile)
     {
-        _profile = profile;
+        _profile = CrosshairProfileRules.Sanitize(profile);
         if (_visible)
             RenderAndUpdate();
+    }
+
+    public void SetForceTopmost(bool forceTopmost)
+    {
+        _forceTopmost = forceTopmost;
+        if (!_visible)
+            return;
+
+        if (_forceTopmost)
+        {
+            NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST,
+                0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            StartKeepTopmostTimer();
+        }
+        else
+        {
+            StopKeepTopmostTimer();
+        }
     }
 
     public bool Show()
@@ -160,6 +188,9 @@ public class OverlayHost : IOverlayHost
 
     private void StartKeepTopmostTimer()
     {
+        if (_keepTopmostTimer != null)
+            return;
+
         _keepTopmostTimer = new Timer(KeepTopmostIntervalMs);
         _keepTopmostTimer.Elapsed += (_, _) =>
         {
@@ -229,84 +260,106 @@ public class OverlayHost : IOverlayHost
                 return;
             }
 
-            _memDc = NativeMethods.CreateCompatibleDC(screenDc);
-            if (_memDc == IntPtr.Zero)
+            try
             {
-                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-                LogService.Error("CreateCompatibleDC failed");
-                return;
-            }
-
-            var bmi = new NativeMethods.BITMAPINFO
-            {
-                bmiHeader = new NativeMethods.BITMAPINFOHEADER
+                _memDc = NativeMethods.CreateCompatibleDC(screenDc);
+                if (_memDc == IntPtr.Zero)
                 {
-                    biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
-                    biWidth = bitmap.Width,
-                    biHeight = -bitmap.Height,
-                    biPlanes = 1,
-                    biBitCount = 32,
-                    biCompression = 0
+                    LogService.Error("CreateCompatibleDC failed");
+                    return;
                 }
-            };
 
-            IntPtr bits;
-            _hBitmap = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
+                var bmi = new NativeMethods.BITMAPINFO
+                {
+                    bmiHeader = new NativeMethods.BITMAPINFOHEADER
+                    {
+                        biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
+                        biWidth = bitmap.Width,
+                        biHeight = -bitmap.Height,
+                        biPlanes = 1,
+                        biBitCount = 32,
+                        biCompression = 0
+                    }
+                };
 
-            if (_hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
-            {
-                NativeMethods.DeleteDC(_memDc);
-                _memDc = IntPtr.Zero;
-                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-                LogService.Error($"CreateDIBSection failed: {Marshal.GetLastWin32Error()}");
-                return;
+                IntPtr bits;
+                _hBitmap = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
+
+                if (_hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
+                {
+                    LogService.Error($"CreateDIBSection failed: {Marshal.GetLastWin32Error()}");
+                    CleanupGdi();
+                    return;
+                }
+
+                Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
+
+                _previousBitmap = NativeMethods.SelectObject(_memDc, _hBitmap);
+                if (_previousBitmap == IntPtr.Zero)
+                {
+                    LogService.Error("SelectObject failed while selecting the DIB section");
+                    CleanupGdi();
+                    return;
+                }
+
+                var blend = new NativeMethods.BLENDFUNCTION
+                {
+                    BlendOp = NativeMethods.AC_SRC_OVER,
+                    BlendFlags = 0,
+                    SourceConstantAlpha = 255,
+                    AlphaFormat = NativeMethods.AC_SRC_ALPHA
+                };
+
+                var pptDst = new NativeMethods.POINT
+                {
+                    x = _screenX + (_screenWidth - bitmap.Width) / 2,
+                    y = _screenY + (_screenHeight - bitmap.Height) / 2
+                };
+
+                var psize = new NativeMethods.SIZE
+                {
+                    cx = bitmap.Width,
+                    cy = bitmap.Height
+                };
+
+                var pptSrc = new NativeMethods.POINT { x = 0, y = 0 };
+
+                if (!NativeMethods.UpdateLayeredWindow(
+                    _hwnd, IntPtr.Zero, ref pptDst, ref psize, _memDc, ref pptSrc, 0, ref blend, NativeMethods.ULW_ALPHA))
+                {
+                    LogService.Error($"UpdateLayeredWindow failed: {Marshal.GetLastWin32Error()}");
+                }
             }
-
-            Marshal.Copy(bitmap.Bytes, 0, bits, bitmap.Bytes.Length);
-
-            NativeMethods.SelectObject(_memDc, _hBitmap);
-            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-
-            var blend = new NativeMethods.BLENDFUNCTION
+            catch (Exception ex)
             {
-                BlendOp = NativeMethods.AC_SRC_OVER,
-                BlendFlags = 0,
-                SourceConstantAlpha = 255,
-                AlphaFormat = NativeMethods.AC_SRC_ALPHA
-            };
-
-            var pptDst = new NativeMethods.POINT
+                LogService.Error("GDI overlay update failed", ex);
+                CleanupGdi();
+            }
+            finally
             {
-                x = _screenX + (_screenWidth - bitmap.Width) / 2,
-                y = _screenY + (_screenHeight - bitmap.Height) / 2
-            };
-
-            var psize = new NativeMethods.SIZE
-            {
-                cx = bitmap.Width,
-                cy = bitmap.Height
-            };
-
-            var pptSrc = new NativeMethods.POINT { x = 0, y = 0 };
-
-            if (!NativeMethods.UpdateLayeredWindow(
-                _hwnd, IntPtr.Zero, ref pptDst, ref psize, _memDc, ref pptSrc, 0, ref blend, NativeMethods.ULW_ALPHA))
-            {
-                LogService.Error($"UpdateLayeredWindow failed: {Marshal.GetLastWin32Error()}");
+                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
             }
         }
     }
 
     private void CleanupGdi()
     {
+        if (_memDc != IntPtr.Zero && _previousBitmap != IntPtr.Zero)
+        {
+            NativeMethods.SelectObject(_memDc, _previousBitmap);
+            _previousBitmap = IntPtr.Zero;
+        }
+
         if (_hBitmap != IntPtr.Zero)
         {
-            NativeMethods.DeleteObject(_hBitmap);
+            if (!NativeMethods.DeleteObject(_hBitmap))
+                LogService.Warn("DeleteObject failed while cleaning overlay bitmap");
             _hBitmap = IntPtr.Zero;
         }
         if (_memDc != IntPtr.Zero)
         {
-            NativeMethods.DeleteDC(_memDc);
+            if (!NativeMethods.DeleteDC(_memDc))
+                LogService.Warn("DeleteDC failed while cleaning overlay memory DC");
             _memDc = IntPtr.Zero;
         }
     }

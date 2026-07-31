@@ -21,17 +21,42 @@ namespace CrosshairOverlay.Widget.Services
         /// <summary>AppService 连接是否活跃。活跃时文件轮询可跳过以减少 I/O。</summary>
         public bool IsConnected { get; private set; }
 
-        private AppServiceClient() { }
+        /// <summary>最近一次成功接收的配置。</summary>
+        public CrosshairProfile CurrentProfile { get; private set; }
 
-        public void Initialize(AppServiceConnection connection, Windows.ApplicationModel.Background.BackgroundTaskDeferral deferral)
+        /// <summary>是否已经接收过桌面端配置。</summary>
+        public bool HasCurrentProfile { get; private set; }
+
+        private AppServiceConnection _connection;
+
+        private AppServiceClient()
         {
+            CurrentProfile = new CrosshairProfile();
+        }
+
+        public void Initialize(AppServiceConnection connection, Action completeDeferral)
+        {
+            if (connection == null)
+            {
+                completeDeferral();
+                return;
+            }
+
+            if (ReferenceEquals(_connection, connection))
+                return;
+
+            _connection = connection;
             IsConnected = true;
+            HasCurrentProfile = false;
 
             connection.RequestReceived += (sender, args) =>
             {
                 var d = args.GetDeferral();
                 try
                 {
+                    if (!ReferenceEquals(_connection, connection))
+                        return;
+
                     var cmd = args.Request.Message[KeyCommand] as string;
                     if (cmd == CmdUpdateProfile)
                     {
@@ -40,7 +65,11 @@ namespace CrosshairOverlay.Widget.Services
                         {
                             var profile = JsonConvert.DeserializeObject<CrosshairProfile>(json);
                             if (profile != null)
-                                ProfileUpdated?.Invoke(profile);
+                            {
+                                CurrentProfile = CrosshairProfileRules.Sanitize(profile);
+                                HasCurrentProfile = true;
+                                ProfileUpdated?.Invoke(CurrentProfile);
+                            }
                             else
                                 System.Diagnostics.Debug.WriteLine("[Widget] AppService profile deserialized to null");
                         }
@@ -50,13 +79,22 @@ namespace CrosshairOverlay.Widget.Services
                 {
                     System.Diagnostics.Debug.WriteLine($"[Widget] AppService RequestReceived error: {ex.Message}");
                 }
-                d.Complete();
+                finally
+                {
+                    d.Complete();
+                }
             };
 
             connection.ServiceClosed += (s, e) =>
             {
-                IsConnected = false;
-                deferral.Complete();
+                if (ReferenceEquals(_connection, connection))
+                {
+                    _connection = null;
+                    IsConnected = false;
+                    HasCurrentProfile = false;
+                }
+
+                completeDeferral();
             };
         }
     }
