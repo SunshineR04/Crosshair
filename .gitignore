@@ -72,6 +72,10 @@ BundleArtifacts/
 
 .qoder/
 
+## Superpowers worktrees and task artifacts
+.worktrees/
+.superpowers/
+
 ## Installer entrypoints are source-controlled; generated Release payloads remain ignored.
 !Release/
 Release/*

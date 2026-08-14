@@ -1,154 +1,70 @@
 # AGENTS.md
 
-This file provides guidance to Qoder (qoder.com) when working with code in this repository.
+本文件供未来 ZCode agents 在本仓库中工作时快速查阅。
 
 ## 项目概述
 
-Windows 桌面准心叠加工具，专为 FPS 游戏设计，支持三种叠加引擎：
-- **WPF 桌面端** (`CrosshairOverlay/`) — .NET 8、SkiaSharp 渲染、托盘图标、全局热键
-- **UWP Game Bar Widget** (`CrosshairOverlay.Widget/`) — Xbox Game Bar 集成，支持独占全屏
-- **Release 分发** — 自包含 zip 包，用户解压后双击 `setup.bat` 安装
+Windows FPS 准心叠加工具：
+- `CrosshairOverlay/`：.NET 8 WPF 桌面端，SkiaSharp + Win32 分层窗口、托盘和全局热键。
+- `CrosshairOverlay.Widget/`：C# 8 UWP/Xbox Game Bar Widget，使用 XAML Shapes 渲染。
+- `CrosshairOverlay.Tests/`：WPF 端 xUnit 测试。
+- `Release/`：手动发布的 MSIX、自包含桌面载荷和 `setup.bat`/`setup.ps1`；发布生成物通常被 `.gitignore` 忽略。
 
-## 构建命令
+## 构建与验证
 
 ```powershell
-# WPF 桌面端（独立运行，无 Widget 同步）
+# 桌面端
 dotnet build CrosshairOverlay
 dotnet run --project CrosshairOverlay
 dotnet publish CrosshairOverlay -c Release -r win-x64 --self-contained true
 
-# UWP Widget（需要 VS 2019+ + UWP 工作负荷 + .NET Native）
-# msbuild 不在 PATH 中，必须用 VS 2019 完整路径：
+# 测试（可选收集 Cobertura 覆盖率）
+dotnet test CrosshairOverlay.Tests
+dotnet test CrosshairOverlay.Tests --collect:"XPlat Code Coverage" --settings CrosshairOverlay.Tests/coverage.runsettings
+
+# Widget：需要 VS 2019+、UWP 工作负荷、Windows SDK 10.0.19041.0 和 .NET Native
 & "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe" CrosshairOverlay.Widget\CrosshairOverlay.Widget.csproj /p:Configuration=Release /p:Platform=x64
 ```
 
-WPF 项目使用 `net8.0-windows10.0.19041.0` — WinRT API (`AppServiceConnection`、`Package.Current`) 需要此 TFM，且仅在 MSIX 包内运行时可用。
+仓库没有独立 lint 配置；提交前至少运行桌面端构建和 xUnit 测试。WPF TFM 为 `net8.0-windows10.0.19041.0`，Widget 不能用普通 `dotnet build` 替代 VS/MSBuild 的 UWP 构建。
 
-项目无测试、无 lint 配置。验证方式为 `dotnet build CrosshairOverlay` 编译通过 + 手动运行。
+## 架构与编辑边界
 
-## 架构
+- WPF 入口为 `App.xaml.cs`；`MainViewModel` 负责设置绑定、保存防抖和把 profile 推送到 `OverlayHost`/Widget。
+- `Rendering/OverlayHost.cs` 使用 Win32 `CreateWindowEx` + `UpdateLayeredWindow`；`CrosshairRenderer` 使用 SkiaSharp 绘制 6 种样式。分层窗口要求 `SKAlphaType.Premul`。
+- `ShutdownMode.OnExplicitShutdown` 是刻意设计：关闭设置窗口只隐藏到托盘，必须通过托盘退出或 `Application.Shutdown()` 结束进程。`UseWindowsForms=true` 只为托盘 `NotifyIcon`。
+- 全局热键由一个保持 `Show()`、但 `Opacity=0` 的 1×1 WPF HWND 接收：`Alt+X` 切换可见性，`Alt+\`` 打开设置；不要隐藏该窗口。
+- WPF 使用 `System.Text.Json`，Widget 使用 `Newtonsoft.Json`；两端的 `CrosshairProfile` 字段和颜色格式（`#RRGGBB`）必须保持兼容。共享规则文件必须保留 C# 8 语法。
+- Widget 的 `CrosshairPage` 使用 `WindowBounds` + `DisplayInformation` 居中，并通过 `AppServiceClient` 接收 IPC；独立运行时每 2 秒读取 `widget_settings.json` 作为 fallback。两个通道需继续并行可靠工作。
 
-### 三种叠加模式
+## UWP/打包约束
 
-| 模式 | 文件 | 需要 | 全屏支持 |
-|---|---|---|---|
-| Simple Overlay | `Rendering/OverlayHost.cs`（默认） | 无 | 窗口化/无边框 |
-| Real Overlay | `Rendering/OverlayHost.cs`（forceTopmost=true） | 管理员权限 | FSO 独占全屏（DirectX） |
-| Game Bar Widget | `CrosshairOverlay.Widget/`（独立 UWP） | Game Bar 已启用 | 真正独占全屏（所有 API） |
+- Widget 项目固定 `LangVersion=8.0`，使用块作用域命名空间；需要 VS 2019+ UWP 工作负荷、Windows SDK `10.0.19041.0`、`.NET Native`。不要用 WPF 的 C# 10 文件作用域模型文件替换 Widget 副本。
+- 手动组包时，Widget 必须使用独立 MSIX 提取出的 .NET Native 原生载荷放在包根目录；WPF 自包含发布物放 `DesktopApp/`。不能用 WPF .NET 8 DLL 替换 Widget DLL。
+- `CrosshairOverlay/Package/Package.appxmanifest` 与 `CrosshairOverlay/Package/PackageLayout/AppxManifest.xml` 必须同步，桌面入口为 `DesktopApp\\CrosshairOverlay.exe`，Widget 尺寸为 `3840×2160`（最大 `7680×4320`）。
 
-### 关键入口
-
-- `App.xaml.cs` — 应用启动、热键注册（Win32 消息窗口）、托盘图标、AppService 初始化、DWM 异常处理
-- `MainWindow.xaml` — 设置界面（6 种准心样式、颜色/大小/透明度滑块、叠加模式切换）
-- `ViewModels/MainViewModel.cs` — MVVM 绑定 + `RelayCommand`（内联定义）；`ApplyProfile()` 推送设置到 OverlayHost 和 Widget
-- `OverlayHost.cs` — 通过 `CreateWindowEx` + `UpdateLayeredWindow` 创建分层透明叠加窗口
-- `CrosshairRenderer.cs` — SkiaSharp 矢量渲染（6 种样式、描边、预乘 alpha）
-- `CrosshairPage.xaml.cs`（Widget）— UWP XAML Shapes 渲染、WindowBounds 自动居中、文件轮询同步
-
-### 框架级设计决策
-
-- **`ShutdownMode.OnExplicitShutdown`**：应用是托盘常驻型，关闭设置窗口不退出进程，只有托盘「退出」或 `Current.Shutdown()` 才终止。
-- **WinForms 依赖**（`UseWindowsForms=true`）：仅用于 `NotifyIcon` + `ContextMenuStrip` 实现系统托盘，无其他 WinForms 用途。
-- **JSON 序列化器差异**：WPF 端用 `System.Text.Json`，Widget 端用 `Newtonsoft.Json`（UWP 兼容性约束）。两端共享相同的 `CrosshairProfile` POCO 字段，序列化结果互通。
-- **DWM 异常保护**：`DispatcherUnhandledException` 捕获 `0x80263001`（DWM 未就绪），防止系统重启后崩溃。
-
-### 热键机制
-
-启动时创建 1×1 不透明度 0 的 WPF 窗口作为 `RegisterHotKey` 的 HWND。`HwndSource.AddHook` 捕获 `WM_HOTKEY`：
-- `Alt+X` → 切换准心可见性（同步到 Widget）
-- `Alt+`` → 打开设置窗口
-
-热键窗口必须**保持可见**（`Show()` + `Opacity=0`），不能隐藏。
-
-### Widget 设置同步（双通道）
-
-**通道 1：AppService IPC**（仅 MSIX 包内运行时可用）
-- `AppServiceServer.cs` 连接 `CrosshairProfileService`，推送 profile JSON
-- `AppServiceClient.cs`（Widget）通过 `OnBackgroundActivated` 接收
-- `_latestProfile` 快照机制：连接建立前、发送失败或断线时保留最新配置，连接恢复后自动 flush
-
-**通道 2：文件同步**（独立 exe 的 fallback）
-- 桌面端 `SettingsService.SaveForWidget()` 写入 `widget_settings.json`
-- Widget 每 2 秒通过 `DispatcherTimer` 轮询读取
-- `IsVisible` setter 立即写入文件，确保 Alt+X 切换实时同步
-
-两个通道并行运行，AppService 可用时即时推送，文件同步持续作为可靠回退通道。当前 Release zip 使用独立 WPF + 独立 Widget MSIX，桌面端不在 MSIX 内运行时 AppService 会自动禁用。
-
-### Widget 准心自动居中
-
-`CrosshairPage` 使用 `XboxGameBarWidget.WindowBounds` API + `DisplayInformation` 计算屏幕中心在 Widget 本地坐标系中的偏移：
-- `OnPageLoaded` 缓存 `ScreenWidthInRawPixels`、`ScreenHeightInRawPixels`、`RawPixelsPerViewPixel`
-- `RenderCrosshair` 计算：`offsetX = (screenCenterRawX / rawPixelsPerViewPixel) - WindowBounds.X`
-- 如果偏移在 Widget 范围内则使用偏移坐标，否则回退到 `ActualWidth/2`
-- `OnNavigatedTo` 调用 `CenterWindowAsync()` 将 Widget 居中到屏幕
-- `WindowBoundsChanged` 事件触发重新渲染
-
-### MSIX 打包（手动）
+## 手动 MSIX 组包
 
 ```powershell
-# 1. 发布 WPF
 dotnet publish CrosshairOverlay -c Release -r win-x64 --self-contained true -o CrosshairOverlay\Package\AppContent
-
-# 2. 从独立 MSIX 提取 Widget 原生文件
 MakeAppx unpack /p CrosshairOverlay.Widget\bin\x64\Release\CrosshairOverlay.Widget_1.0.0.0_x64.msix /d $env:TEMP\widget_extract /o
-
-# 3. 组装 PackageLayout
-#    根目录 ← Widget 原生文件（从提取的 MSIX，不是 bin\Release 原始输出）
-#    DesktopApp\ ← WPF 发布文件
-#    Assets\ ← Widget PNG 资源
-#    AppxManifest.xml ← 合并清单（两个 Application 条目）
-
-# 4. 打包 + 签名 + 安装
+# 将提取的 Widget 载荷放 PackageLayout 根目录，WPF 发布物放 PackageLayout\DesktopApp
 MakeAppx pack /d PackageLayout /p output.msix /o
 signtool sign /fd SHA256 /f cert.pfx /p password output.msix
 Add-AppxPackage -Path output.msix
 ```
 
-**关键**：Widget 原生 DLL（约 10MB .NET Native 编译）不能被 WPF 的 .NET 8 DLL 替换。Widget 文件放根目录，WPF 文件放 `DesktopApp\` 子目录。
+## 配置、日志与发布
 
-### Widget 项目约束（VS 2019 + UWP）
-
-- C# 语言版本锁定为 **8.0**（UWP XAML 编译器限制）— 不支持文件作用域命名空间、目标类型 new、**lambda 弃元 `(_, _)`**
-- Models 必须使用块作用域命名空间
-- 需要 .NET Native 编译；`bin\Release` 原始输出包含未编译 IL 文件 — 打包时用独立 MSIX 的**提取载荷**
-- 需要 VS Installer 组件：`Microsoft.Gaming.XboxGameBar` NuGet、`Microsoft.NETCore.UniversalWindowsPlatform`、`Newtonsoft.Json`
-- Widget 使用自己的 `Models\CrosshairProfile.cs` 副本（不是 WPF 项目的链接，因为 WPF 用 C# 10 文件作用域命名空间）
-- 需要 Windows SDK `10.0.19041.0`
-
-### Manifest 一致性
-
-`Package/Package.appxmanifest`（源码）和 `Package/PackageLayout/AppxManifest.xml`（手动打包）必须保持一致：
-- 桌面端路径：`Executable="DesktopApp\CrosshairOverlay.exe"`
-- Widget 尺寸：`3840×2160`，MaxHeight `4320`，MaxWidth `7680`
-
-### Release 打包
-
-构建后创建 zip 包：
-```
-CrosshairOverlay_v1.1.0_Setup.zip
-├── CrosshairOverlay/        ← 自包含发布（约 198 MB）
-├── CrosshairOverlayWidget.msix
-├── CrosshairOverlayWidget.cer
-└── setup.bat                ← 双击安装（调用 setup.ps1，安装证书 + Widget + 启动桌面端）
-```
-
-发布到 GitHub Releases 和 Gitee Releases（Gitee 不支持 API 上传附件，需手动在网页端上传或引导用户从 GitHub 下载）。
-
-## 配置与存储
-
-- 设置文件：`%APPDATA%\CrosshairOverlay\settings.json`（System.Text.Json，`CrosshairProfile` POCO）
-- 错误日志：`%APPDATA%\CrosshairOverlay\log.txt`
-- Widget 设置：`%LOCALAPPDATA%\Packages\CrosshairOverlayWidget_ttvw7j9e3pmmp\LocalState\widget_settings.json`（桌面端写入，Widget 轮询读取）
+- WPF 设置：`%APPDATA%\CrosshairOverlay\settings.json`；日志：`%APPDATA%\CrosshairOverlay\log.txt`。
+- Widget fallback 文件：`%LOCALAPPDATA%\Packages\CrosshairOverlayWidget_ttvw7j9e3pmmp\LocalState\widget_settings.json`。包族名随证书/Identity 变化，不能盲目硬编码到新包。
+- `Release\setup.bat` 调用 `setup.ps1`；脚本会把 `.cer` 加入当前用户 `TrustedPeople`、安装 MSIX、校验包并启动 `Release\CrosshairOverlay\CrosshairOverlay.exe`。
 
 ## 已知陷阱
 
-- **管理员重启热键竞争**：切换 Real Overlay 时，非管理员进程必须先 `UnregisterHotKey` 再启动管理员进程（见 `OnRestartRequested`）。新进程启动时旧进程可能尚未完全退出，`RegisterHotKey` 可能返回 `ERROR_HOTKEY_ALREADY_REGISTERED (1409)`。当前代码无重试逻辑，注册失败时 `_hotkeyOk=false` 并提示用户使用托盘菜单。
-- **Game Bar Widget 点击穿透**：固定的小部件默认拦截鼠标输入。用户必须点击 Game Bar Home Bar 上的鼠标图标启用点击穿透。manifest 声明 `PinningSupported=true` 即可支持。
-- **EnumWindows 与 Widget HWND**：Widget 的 CoreWindow 对 Win32 `EnumWindows` 不可见。不要尝试 `WidgetPositioner` 式扫描。
-- **ForceTopmost 定时器**：`System.Timers.Timer.Elapsed` 在线程池运行；从非 UI 线程调用 `SetWindowPos` 对 USER32 操作是安全的，但确保 HWND 有效。
-- **SkiaSharp alpha**：`UpdateLayeredWindow` + `AC_SRC_ALPHA` 要求 `SKAlphaType.Premul`。使用 `Unpremul` 会导致渲染伪影。
-- **MainViewModel.Dispose()**：退出时必须调用。`_saveDebounceTimer` 持有 Dispatcher 引用。`SaveSettings()` 检查 `_disposed` 标志避免 `ObjectDisposedException`。退出顺序：先 `SaveSettings()`，再 `Dispose()`。
-- **SettingsService.SaveForWidget()**：写入 Widget 的 LocalState 文件夹。路径中的 `CrosshairOverlayWidget_ttvw7j9e3pmmp` 是包族名 — 如果 Widget 证书更换，此路径会变。
-- **Widget DisplayInformation 缓存**：`_screenCenterRawX/Y` 在 `OnPageLoaded` 时缓存，不刷新。如果 Widget 打开期间更换显示器分辨率，缓存值会过时。解决：重新打开 Widget。
-- **GDI 资源管理**：`RenderAndUpdate` 中所有 Win32 调用（`GetDC`、`CreateCompatibleDC`、`CreateDIBSection`、`UpdateLayeredWindow`）都检查返回值，失败时释放已分配资源并记录 `Debug.WriteLine`。
-- **Widget 可见性同步**：`IsVisible` setter 末尾写入 `_profile.IsVisible` 和 `SaveForWidget`，Widget 的 `RenderCrosshair` 开头检查 `_profile.IsVisible`，为 false 时清空 Canvas 不渲染。
+- **管理员重启**：启用 Real Overlay 时会先注销热键、保存并以管理员重启；新旧进程短暂竞争时注册可能失败。当前有 5 次、100ms 间隔重试，失败时 UI/托盘提示用户。
+- **Widget 点击穿透**：固定 Widget 默认拦截鼠标，必须在 Game Bar Home Bar 点击鼠标图标启用穿透；`PinningSupported=true` 仅表示支持固定。
+- **不要扫描 Widget HWND**：UWP CoreWindow 对 Win32 `EnumWindows` 不可见，不能用桌面端窗口扫描定位。
+- **线程与资源**：`ForceTopmost` 定时器在线程池调用 USER32；修改时确保 HWND 有效。`OverlayHost.RenderAndUpdate` 的 GDI/DC/bitmap 必须逐一检查和释放。
+- **生命周期**：退出顺序保持 `SaveSettings()` → `MainViewModel.Dispose()` → 注销热键/释放 HWND → `OverlayHost`/IPC/单实例资源；保存防抖 Timer 持有 Dispatcher。
+- **渲染与同步**：Widget 居中使用的屏幕/DPI 缓存不会在显示器分辨率改变后自动刷新；`IsVisible=false` 时必须清空 Widget Canvas，且可见性切换要立即写 fallback 文件。
